@@ -1,0 +1,37 @@
+{
+  "name": "Glider Game",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared",
+        "$ignoreUnknownInstances": true
+      }
+    },
+
+    "ReplicatedFirst": {
+      "$path": "src/first",
+      "$ignoreUnknownInstances": true
+    },
+
+    "ServerScriptService": {
+      "$path": "src/server",
+      "$ignoreUnknownInstances": true
+    },
+
+    "StarterGui": {
+      "$properties": {
+        "VirtualCursorMode": "Default"
+      },
+      "$ignoreUnknownInstances": true
+    },
+
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "$path": "src/client",
+        "$ignoreUnknownInstances": true
+      }
+    }
+  }
+}
