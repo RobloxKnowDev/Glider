@@ -1,5 +1,8 @@
 local Tweenservice = game:GetService("TweenService")
 
+local Sounds = require(script.Parent.Parent.Config.Sounds)
+local Sfx = require(script.Parent.Sfx)
+
 local Uifade = {}
 
 local Defaultduration = 0.2
@@ -14,6 +17,8 @@ local Popdirection = Enum.EasingDirection.Out
 local Hoverscale = 1.08
 local Pressscale = 0.95
 local Hoverinfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local Hovervolume = 0.25
+local Clickvolume = 0.5
 
 local Fadeproperties = {
 	Frame = { "BackgroundTransparency" },
@@ -114,6 +119,7 @@ local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> ()
 	Button.MouseEnter:Connect(function()
 		Hovering = true
 		Animate(Hoverscale)
+		Sfx.Play(Sounds.Ui.Hover, Hovervolume)
 	end)
 	Button.MouseLeave:Connect(function()
 		Hovering = false
@@ -122,6 +128,7 @@ local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> ()
 	Button.SelectionGained:Connect(function()
 		Hovering = true
 		Animate(Hoverscale)
+		Sfx.Play(Sounds.Ui.Hover, Hovervolume)
 	end)
 	Button.SelectionLost:Connect(function()
 		Hovering = false
@@ -129,6 +136,7 @@ local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> ()
 	end)
 	Button.MouseButton1Down:Connect(function()
 		Animate(Pressscale)
+		Sfx.Play(Sounds.Ui.Click, Clickvolume)
 	end)
 	Button.MouseButton1Up:Connect(function()
 		Animate(if Hovering then Hoverscale else 1)

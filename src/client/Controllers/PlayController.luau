@@ -3,6 +3,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 
@@ -31,16 +33,49 @@ type Card = {
 local Player = Players.LocalPlayer
 local SentTime = 5
 local DeclinedTime = 3
+local TabVolume = 0.5
+local SendVolume = 0.5
+local InvitedVolume = 0.7
+local DeclinedVolume = 0.5
 local BusyStyle: Style = {
 	Background = Color3.fromRGB(110, 110, 110),
 	Stroke = Color3.fromRGB(150, 150, 150),
 	TextStroke = Color3.fromRGB(60, 60, 60),
 }
 
+local function Headshot(Other: Player): string
+	return "rbxthumb://type=AvatarHeadShot&id=" .. Other.UserId .. "&w=150&h=150"
+end
+
+function PlayController:Group(Owner: Player?, Member: Player?)
+	self.role = if Owner == Player then "Owner" elseif Member == Player then "Member" else nil
+	local Play = self.play
+	local Style, Text = Play.Style, Play.Label
+	if self.role == "Owner" then
+		Text = "Start!"
+	elseif self.role == "Member" then
+		Style, Text = Play.Leave, "Leave"
+	end
+	Play.Button.BackgroundColor3 = Style.Background
+	Play.Stroke.Color = Style.Stroke
+	Play.TextStroke.Color = Style.TextStroke
+	Translation.Set(Play.Text, Text)
+
+	local Right = self.right
+	Right.Frame.Visible = self.role ~= nil
+	Right.Leave.Visible = self.role == "Owner"
+	if Owner and Member then
+		Right.Owner.Image = Headshot(Owner)
+		Right.Second.Image = Headshot(Member)
+	end
+end
+
 function PlayController:Paint(Card: Card)
 	local Style, Text = self.style, "Invite"
 	if Card.Player:GetAttribute("Flying") then
 		Style, Text = BusyStyle, "Playing"
+	elseif Card.Player:GetAttribute("Grouped") then
+		Style, Text = BusyStyle, "In group"
 	elseif Card.Label then
 		Style, Text = BusyStyle, Card.Label
 	end
@@ -70,7 +105,7 @@ function PlayController:Add(Other: Player)
 	local Button = Holder:WaitForChild("InviteButton") :: GuiButton
 	local Text = Button:WaitForChild("Text") :: TextLabel
 	local Icon = Holder:WaitForChild("Icon") :: ImageLabel
-	Icon.Image = "rbxthumb://type=AvatarHeadShot&id=" .. Other.UserId .. "&w=150&h=150"
+	Icon.Image = Headshot(Other)
 	Translation.Raw(Holder:WaitForChild("Name") :: TextLabel, Other.DisplayName)
 
 	local Card: Card = {
@@ -87,15 +122,18 @@ function PlayController:Add(Other: Player)
 
 	UiFade.BindButton(Button)
 	Button.Activated:Connect(function()
-		if Card.Label or Other:GetAttribute("Flying") then
+		if Card.Label or Other:GetAttribute("Flying") or Other:GetAttribute("Grouped") then
 			return
 		end
 		self:Hold(Card, "Sent", SentTime)
+		Sfx.Play(Sounds.Duo.Send, SendVolume)
 		Remotemanager:FireServer("DuoService", "Invite", Other)
 	end)
-	Other:GetAttributeChangedSignal("Flying"):Connect(function()
-		self:Paint(Card)
-	end)
+	for _, Attribute in ipairs({ "Flying", "Grouped" }) do
+		Other:GetAttributeChangedSignal(Attribute):Connect(function()
+			self:Paint(Card)
+		end)
+	end
 	self:Paint(Card)
 	Clone.Parent = self.scrolling
 end
@@ -104,8 +142,12 @@ function PlayController:Init()
 	local Ui = Core:GetController("UiController")
 	local PlayerGui = Player:WaitForChild("PlayerGui")
 	local Gui = PlayerGui:WaitForChild("PlayUi") :: ScreenGui
-	local Left = PlayerGui:WaitForChild("HUD"):WaitForChild("Left") :: GuiObject
+	local Hud = PlayerGui:WaitForChild("HUD")
+	local Left = Hud:WaitForChild("Left") :: GuiObject
+	local Right = Hud:WaitForChild("Right") :: GuiObject
+	local LeaveButton = Right:WaitForChild("LeaveButton") :: GuiButton
 	local PlayButton = Gui:WaitForChild("PlayButton") :: GuiButton
+	local PlayText = PlayButton:WaitForChild("Text") :: TextLabel
 	local MainFrame = Gui:WaitForChild("MainFrame") :: GuiObject
 	local CloseButton = MainFrame:WaitForChild("Top"):WaitForChild("CloseButton") :: GuiButton
 	local SoloButton = MainFrame:WaitForChild("SoloButton") :: GuiButton
@@ -125,6 +167,31 @@ function PlayController:Init()
 		Stroke = (InviteButton:WaitForChild("UIStroke") :: UIStroke).Color,
 		TextStroke = (InviteButton:WaitForChild("Text"):WaitForChild("UIStroke") :: UIStroke).Color,
 	}
+	local PlayStroke = PlayButton:WaitForChild("UIStroke") :: UIStroke
+	local PlayTextStroke = PlayText:WaitForChild("UIStroke") :: UIStroke
+	self.play = {
+		Button = PlayButton,
+		Stroke = PlayStroke,
+		Text = PlayText,
+		TextStroke = PlayTextStroke,
+		Label = PlayText.Text,
+		Style = {
+			Background = PlayButton.BackgroundColor3,
+			Stroke = PlayStroke.Color,
+			TextStroke = PlayTextStroke.Color,
+		},
+		Leave = {
+			Background = LeaveButton.BackgroundColor3,
+			Stroke = (LeaveButton:WaitForChild("UIStroke") :: UIStroke).Color,
+			TextStroke = (LeaveButton:WaitForChild("Text"):WaitForChild("UIStroke") :: UIStroke).Color,
+		},
+	}
+	self.right = {
+		Frame = Right,
+		Owner = Right:WaitForChild("IconOwner") :: ImageLabel,
+		Second = Right:WaitForChild("IconSecond") :: ImageLabel,
+		Leave = LeaveButton,
+	}
 	local function Page(Duo: boolean)
 		DuoPage.Visible = Duo
 		SoloButton.Visible = not Duo
@@ -134,6 +201,7 @@ function PlayController:Init()
 	MainFrame.Visible = false
 	Message.Visible = false
 	Page(false)
+	self:Group(nil, nil)
 
 	self.template = Template
 	self.scrolling = Scrolling
@@ -153,11 +221,20 @@ function PlayController:Init()
 		end
 	end)
 
-	for _, Button in ipairs({ PlayButton, CloseButton, SoloButton, DuoButton, DuoCloseButton, AcceptButton, DeclineButton }) do
+	for _, Button in ipairs({ PlayButton, CloseButton, SoloButton, DuoButton, DuoCloseButton, AcceptButton, DeclineButton, LeaveButton }) do
 		UiFade.BindButton(Button)
 	end
 	PlayButton.Activated:Connect(function()
-		Ui:Toggle(MainFrame)
+		if self.role == "Owner" then
+			Remotemanager:FireServer("DuoService", "Start")
+		elseif self.role == "Member" then
+			Remotemanager:FireServer("DuoService", "Leave")
+		else
+			Ui:Toggle(MainFrame)
+		end
+	end)
+	LeaveButton.Activated:Connect(function()
+		Remotemanager:FireServer("DuoService", "Leave")
 	end)
 	CloseButton.Activated:Connect(function()
 		Ui:Close()
@@ -169,9 +246,11 @@ function PlayController:Init()
 	DuoButton.Activated:Connect(function()
 		Page(true)
 		UiFade.Pop(DuoPage)
+		Sfx.Play(Sounds.Ui.Tab, TabVolume)
 	end)
 	DuoCloseButton.Activated:Connect(function()
 		Page(false)
+		Sfx.Play(Sounds.Ui.Tab, TabVolume)
 	end)
 	MainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
 		Page(false)
@@ -196,6 +275,7 @@ function PlayController:Init()
 		Translation.Set(MessageText, "{1} invites you to play duo!", From.DisplayName)
 		Message.Visible = true
 		UiFade.Pop(Message)
+		Sfx.Play(Sounds.Duo.Invited, InvitedVolume)
 		task.delay(Timeout, function()
 			if self.token == Token then
 				Message.Visible = false
@@ -204,6 +284,13 @@ function PlayController:Init()
 	end)
 	Remotemanager:OnClientEvent("DuoService", "Declined", function(Other)
 		self:Hold(self.cards[Other], "Declined", DeclinedTime)
+		Sfx.Play(Sounds.Duo.Declined, DeclinedVolume)
+	end)
+	Remotemanager:OnClientEvent("DuoService", "Grouped", function(Owner, Member)
+		if MainFrame.Visible then
+			Ui:Close()
+		end
+		self:Group(Owner, Member)
 	end)
 
 	Remotemanager:OnClientEvent("GliderService", "Launching", function()

@@ -8,7 +8,9 @@ local GlidersConfig = require(ReplicatedStorage.Shared.Config.Gliders)
 local TrailsConfig = require(ReplicatedStorage.Shared.Config.Trails)
 local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
-local GliderFrame = require(ReplicatedStorage.Shared.Utils.GliderFrame)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
+local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 local UiGradient = require(ReplicatedStorage.Shared.Utils.UiGradient)
@@ -27,6 +29,8 @@ type Style = {
 type Entry = {
 	Name: string,
 	Rarity: string,
+	Gamepass: number?,
+	Price: number?,
 }
 
 type Catalog = {
@@ -37,6 +41,8 @@ type Catalog = {
 type Card = {
 	Category: string,
 	Name: string,
+	Gamepass: boolean,
+	Price: number?,
 	Clone: GuiObject,
 	Button: GuiButton,
 	Stroke: UIStroke,
@@ -66,35 +72,25 @@ local LockedStyle: Style = {
 	Stroke = Color3.fromRGB(150, 150, 150),
 	TextStroke = Color3.fromRGB(60, 60, 60),
 }
+local BuyStyle: Style = {
+	Background = Color3.fromRGB(230, 165, 0),
+	Stroke = Color3.fromRGB(255, 215, 60),
+	TextStroke = Color3.fromRGB(125, 90, 0),
+}
+local Robux = "\u{E002}"
 local White = Color3.new(1, 1, 1)
 local LockTransparency = 0.6
 local LockZIndex = 10
 local SpinSpeed = math.rad(90)
 local SpinReturnResponse = 8
-local FieldOfView = 40
-local ViewDirection = (CFrame.Angles(0, math.rad(35), 0) * CFrame.Angles(math.rad(25), 0, 0)).LookVector
+local EquipVolume = 0.6
+local LockedVolume = 0.5
 
 local function Paint(Card: Card, Style: Style, Text: string)
 	Card.Button.BackgroundColor3 = Style.Background
 	Card.Stroke.Color = Style.Stroke
 	Card.TextStroke.Color = Style.TextStroke
 	Translation.Set(Card.Text, Text)
-end
-
-local function Showcase(Viewport: ViewportFrame, Template: Model): (Model, CFrame)
-	local Model = Template:Clone()
-	local Bar = Model:WaitForChild("Bar") :: BasePart
-	Model:PivotTo(GliderFrame(Bar):Inverse() * Bar.CFrame:ToObjectSpace(Model:GetPivot()))
-	local Box, Size = Model:GetBoundingBox()
-	Model:PivotTo(CFrame.new(-Box.Position) * Model:GetPivot())
-
-	local Camera = Instance.new("Camera")
-	Camera.FieldOfView = FieldOfView
-	Camera.CFrame = CFrame.lookAt(ViewDirection * Size.Magnitude / 2 / math.sin(math.rad(FieldOfView / 2)), Vector3.zero)
-	Camera.Parent = Viewport
-	Viewport.CurrentCamera = Camera
-	Model.Parent = Viewport
-	return Model, Model:GetPivot()
 end
 
 function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, Template: GuiObject, Entry: Entry, Index: number): Card
@@ -119,7 +115,7 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	RarityStroke.Color = Tier.Stroke
 
 	if Category == "Gliders" then
-		local Model, Base = Showcase(Holder:WaitForChild("ViewportFrame") :: ViewportFrame, self.models:WaitForChild(Entry.Name) :: Model)
+		local Model, Base = GliderShowcase(Holder:WaitForChild("ViewportFrame") :: ViewportFrame, self.models:WaitForChild(Entry.Name) :: Model)
 		local Spinner: Spinner = { Model = Model, Base = Base, Angle = 0 }
 		table.insert(self.spinners, Spinner)
 		Clone.MouseEnter:Connect(function()
@@ -149,6 +145,8 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	local Card: Card = {
 		Category = Category,
 		Name = Entry.Name,
+		Gamepass = Entry.Gamepass ~= nil,
+		Price = Entry.Price,
 		Clone = Clone,
 		Button = Button,
 		Stroke = Button:WaitForChild("UIStroke") :: UIStroke,
@@ -156,13 +154,22 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 		TextStroke = Text:WaitForChild("UIStroke") :: UIStroke,
 		Lock = Lock,
 	}
+	if Card.Gamepass then
+		Button.ZIndex = LockZIndex + 1
+	end
 	UiFade.BindButton(Button)
 	Button.Activated:Connect(function()
 		local Inventory = self.state[Category]
 		if not Inventory.Owned[Card.Name] then
+			if Card.Gamepass then
+				Remotemanager:FireServer("InventoryService", "Buy", Category, Card.Name)
+			else
+				Sfx.Play(Sounds.Ui.Negative, LockedVolume)
+			end
 			return
 		end
 		local Action = if Inventory.Equipped == Card.Name then "Unequip" else "Equip"
+		Sfx.Play(Sounds.Inventory[Action], EquipVolume)
 		Remotemanager:FireServer("InventoryService", Action, Category, Card.Name)
 	end)
 
@@ -176,7 +183,9 @@ function InventoryController:Apply(State)
 		local Inventory = State[Card.Category]
 		local Owned = Inventory.Owned[Card.Name] == true
 		Card.Lock.Visible = not Owned
-		if not Owned then
+		if not Owned and Card.Gamepass then
+			Paint(Card, BuyStyle, Card.Price .. Robux)
+		elseif not Owned then
 			Paint(Card, LockedStyle, "Locked")
 		elseif Inventory.Equipped == Card.Name then
 			Paint(Card, UnequipStyle, "UnEquip")

@@ -12,6 +12,9 @@ local DuoService = {
 		Answer = "Event",
 		Invited = "Event",
 		Declined = "Event",
+		Start = "Event",
+		Leave = "Event",
+		Grouped = "Event",
 	},
 }
 
@@ -20,11 +23,17 @@ type Invite = {
 	Time: number,
 }
 
+type Group = {
+	Owner: Player,
+	Member: Player,
+}
+
 local InviteTimeout = 20
 local Invites: { [Player]: Invite } = {}
+local Groups: { [Player]: Group } = {}
 
 local function Free(Player: Player): boolean
-	return not Core:GetService("GliderService"):IsFlying(Player)
+	return not Groups[Player] and not Core:GetService("GliderService"):IsFlying(Player)
 end
 
 function DuoService:Invite(Player: Player, Target: any)
@@ -46,8 +55,38 @@ function DuoService:Answer(Player: Player, From: any, Accepted: any)
 		return
 	end
 	if os.clock() - Invite.Time <= InviteTimeout and Free(Invite.From) and Free(Player) then
-		Core:GetService("GliderService"):Launch({ Invite.From, Player })
+		self:Form(Invite.From, Player)
 	end
+end
+
+function DuoService:Form(Owner: Player, Member: Player)
+	local Group: Group = { Owner = Owner, Member = Member }
+	for _, Player in ipairs({ Owner, Member }) do
+		Groups[Player] = Group
+		Player:SetAttribute("Grouped", true)
+		Remotemanager:FireClient(self.Name, "Grouped", Player, Owner, Member)
+	end
+end
+
+function DuoService:Leave(Player: Player)
+	local Group = Groups[Player]
+	if not Group then
+		return
+	end
+	for _, Other in ipairs({ Group.Owner, Group.Member }) do
+		Groups[Other] = nil
+		Other:SetAttribute("Grouped", nil)
+		Remotemanager:FireClient(self.Name, "Grouped", Other, nil, nil)
+		Core:GetService("GliderService"):Wreck(Other)
+	end
+end
+
+function DuoService:Launch(Player: Player)
+	local Group = Groups[Player]
+	if not Group or Group.Owner ~= Player then
+		return
+	end
+	Core:GetService("GliderService"):Launch({ Group.Owner, Group.Member })
 end
 
 function DuoService:Init()
@@ -57,7 +96,14 @@ function DuoService:Init()
 	Remotemanager:OnServerEvent(self.Name, "Answer", function(Player, From, Accepted)
 		self:Answer(Player, From, Accepted)
 	end)
+	Remotemanager:OnServerEvent(self.Name, "Start", function(Player)
+		self:Launch(Player)
+	end)
+	Remotemanager:OnServerEvent(self.Name, "Leave", function(Player)
+		self:Leave(Player)
+	end)
 	Players.PlayerRemoving:Connect(function(Player)
+		self:Leave(Player)
 		Invites[Player] = nil
 		for Target, Invite in pairs(Invites) do
 			if Invite.From == Player then

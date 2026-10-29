@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 
 local LoadingController = {
 	Name = "LoadingController",
@@ -26,6 +27,12 @@ local function AddImageId(List: { Instance }, Id: string)
 	table.insert(List, Image)
 end
 
+local function AddSoundId(List: { Instance }, Id: string)
+	local Sound = Instance.new("Sound")
+	Sound.SoundId = Id
+	table.insert(List, Sound)
+end
+
 function LoadingController:Start()
 	task.spawn(function()
 		local Player = Players.LocalPlayer
@@ -36,6 +43,11 @@ function LoadingController:Start()
 		for _, Group in pairs(Images) do
 			for _, Id in pairs(Group) do
 				AddImageId(Essential, Id)
+			end
+		end
+		for _, Group in pairs(Sounds) do
+			for _, Id in pairs(Group) do
+				AddSoundId(Essential, Id)
 			end
 		end
 		local Loaded = false

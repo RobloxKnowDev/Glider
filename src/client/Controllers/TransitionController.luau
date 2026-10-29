@@ -1,6 +1,10 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
+
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 
 local TransitionController = {
 	Name = "TransitionController",
@@ -16,6 +20,7 @@ local CloseTime = 0.3
 local ShutTime = 0.5
 local OpenDelay = 0.2
 local OpenTime = 0.5
+local WhooshVolume = 0.4
 
 local function Reach(Center: Vector2, Screen: Vector2): number
 	return Vector2.new(math.max(Center.X, Screen.X - Center.X), math.max(Center.Y, Screen.Y - Center.Y)).Magnitude * 2
@@ -48,6 +53,7 @@ function TransitionController:Close(Character: Model)
 	self.hole.Size = UDim2.fromOffset(Full, Full)
 	self.cover.Visible = false
 	self.gui.Enabled = true
+	Sfx.Play(Sounds.Transition.Close, WhooshVolume)
 	self:Iris(self.gui.AbsoluteSize.Y * PauseSize, ShrinkTime)
 	task.wait(PauseTime)
 	self:Iris(2, CloseTime)
@@ -60,15 +66,20 @@ function TransitionController:Shut(Character: Model)
 	self.hole.Size = UDim2.fromOffset(Full, Full)
 	self.cover.Visible = false
 	self.gui.Enabled = true
+	Sfx.Play(Sounds.Transition.Close, WhooshVolume)
 	self:Iris(2, ShutTime)
 	self.cover.Visible = true
 end
 
 function TransitionController:Open(Character: Model, Token: number)
 	task.wait(OpenDelay)
+	if self.token ~= Token then
+		return
+	end
 	local Full = self:Aim(Character:WaitForChild("Head") :: BasePart)
 	self.hole.Size = UDim2.fromOffset(2, 2)
 	self.cover.Visible = false
+	Sfx.Play(Sounds.Transition.Open, WhooshVolume)
 	self:Iris(Full, OpenTime)
 	if self.token == Token then
 		self.gui.Enabled = false

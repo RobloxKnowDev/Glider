@@ -6,6 +6,8 @@ local Workspace = game:GetService("Workspace")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
+local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 
 local GliderController = {
 	Name = "GliderController",
@@ -16,7 +18,7 @@ local Player = Players.LocalPlayer
 
 local ForwardSpeed = 30
 local SinkSpeed = 6
-local WindLiftSpeed = 40
+local WindLiftSpeed = 25
 local LiftResponse = 6
 local SinkResponse = 2
 local RingBoost = 12
@@ -40,6 +42,17 @@ local StickDeadzone = 0.2
 local PitchLimit = math.rad(35)
 local ReturnDelay = 2.5
 local ReturnResponse = 3
+local CrashDistance = 18
+local CrashResponse = 4
+
+local LaunchVolume = 0.7
+local WindVolume = 0.35
+local WindMin = 0.8
+local WindMax = 1.4
+local GustVolume = 0.6
+local BoostVolume = 0.6
+local CrashVolume = 0.8
+local ThudVolume = 0.7
 
 local function Approach(Current: number, Target: number, Response: number, Dt: number): number
 	return Current + (Target - Current) * (1 - math.exp(-Response * Dt))
@@ -69,14 +82,25 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			table.insert(Crew, RiderController:Track(Weld :: Weld))
 		end
 	end
+	for _, Rider in ipairs(Crew) do
+		RiderController:Reset(Rider)
+	end
 
-	local Params = OverlapParams.new()
-	Params.FilterType = Enum.RaycastFilterType.Exclude
-	Params.RespectCanCollide = true
+	local Near = OverlapParams.new()
+	Near.FilterType = Enum.RaycastFilterType.Exclude
+	Near.RespectCanCollide = true
+	local Touch = OverlapParams.new()
+	Touch.FilterType = Enum.RaycastFilterType.Include
+	Touch.RespectCanCollide = true
+	local Hull: { BasePart } = {}
+	for _, Part in ipairs(Glider:GetDescendants()) do
+		if Part:IsA("BasePart") and Part.Transparency < 1 then
+			table.insert(Hull, Part)
+		end
+	end
 
 	local Camera = Workspace.CurrentCamera
 	Camera.CameraType = Enum.CameraType.Scriptable
-	local Transition = Core:GetController("TransitionController")
 
 	local Position = Start.Position
 	local _, Yaw = Start:ToOrientation()
@@ -90,18 +114,22 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Stick = Vector2.zero
 	local Locked = false
 	local Follow: Vector3? = nil
+	local Watch = Vector3.zero
+	local Gusting = false
+	local Wind = Sfx.Loop(Sounds.Flight.Wind, WindVolume)
+	Sfx.Play(Sounds.Flight.Launch, LaunchVolume)
 
 	local function Crash()
 		if Follow then
 			return
 		end
-		Follow = Camera.CFrame.Position - Head.Position
-		task.spawn(Transition.Play, Transition, Character, function()
-			while self.flight do
-				task.wait()
-			end
-			return Character
-		end)
+		Watch = Camera.CFrame.Position
+		Follow = (Watch - Head.Position).Unit * CrashDistance
+		Locked = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		Wind:Stop()
+		Sfx.Play(Sounds.Flight.Crash, CrashVolume)
+		Sfx.Play(Sounds.Flight.Thud, ThudVolume)
 	end
 
 	local function Orbit(Turn: number, Tilt: number)
@@ -126,11 +154,8 @@ function GliderController:Begin(Name: string, Start: CFrame)
 
 	local Loop = RunService.RenderStepped:Connect(function(Dt)
 		if Follow then
-			Camera.CFrame = CFrame.lookAt(Head.Position + Follow, Head.Position)
-			return
-		end
-		if Humanoid.Health <= 0 then
-			Follow = Camera.CFrame.Position - Head.Position
+			Watch = Watch:Lerp(Head.Position + Follow, 1 - math.exp(-CrashResponse * Dt))
+			Camera.CFrame = CFrame.lookAt(Watch, Head.Position)
 			return
 		end
 
@@ -158,6 +183,24 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		RiderController:Steer(Me, Offset)
 		Total += Offset
 
+		local Inside = false
+		for _, Child in ipairs(Windzones:GetChildren()) do
+			local Zone = Child :: BasePart
+			local Local = Zone.CFrame:PointToObjectSpace(Position)
+			if
+				math.abs(Local.X) <= Zone.Size.X / 2
+				and math.abs(Local.Y) <= Zone.Size.Y / 2
+				and math.abs(Local.Z) <= Zone.Size.Z / 2
+			then
+				Inside = true
+				break
+			end
+		end
+		if Inside and not Gusting then
+			Sfx.Play(Sounds.Flight.Gust, GustVolume)
+		end
+		Gusting = Inside
+
 		local Heading
 		if Pilot then
 			local Balance = Total / Count / Limit
@@ -166,19 +209,6 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			local Turn = Bank / MaxBank * TurnSpeed
 			Yaw -= Turn * Dt
 			Heading = CFrame.Angles(0, Yaw, 0)
-			local Inside = false
-			for _, Wind in ipairs(Windzones:GetChildren()) do
-				local Zone = Wind :: BasePart
-				local Local = Zone.CFrame:PointToObjectSpace(Position)
-				if
-					math.abs(Local.X) <= Zone.Size.X / 2
-					and math.abs(Local.Y) <= Zone.Size.Y / 2
-					and math.abs(Local.Z) <= Zone.Size.Z / 2
-				then
-					Inside = true
-					break
-				end
-			end
 			Climb = if Inside
 				then Approach(Climb, WindLiftSpeed, LiftResponse, Dt)
 				else Approach(Climb, -SinkSpeed, SinkResponse, Dt)
@@ -196,6 +226,10 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			Bank = math.asin(math.clamp(-Seat.RightVector.Y, -1, 1))
 			Heading = CFrame.Angles(0, Yaw, 0)
 		end
+
+		local Rush = math.clamp(Bar.AssemblyLinearVelocity.Magnitude / ForwardSpeed, WindMin, WindMax)
+		Wind.Volume = WindVolume * Rush
+		Wind.PlaybackSpeed = Rush
 
 		Sendtimer += Dt
 		if Sendtimer >= SendInterval then
@@ -232,16 +266,34 @@ function GliderController:Begin(Name: string, Start: CFrame)
 				table.insert(Ghosts, Other.Character)
 			end
 		end
-		Params.FilterDescendantsInstances = Ghosts
+		Near.FilterDescendantsInstances = Ghosts
 		local Bodies: { Model } = { Glider }
+		local Shapes = table.clone(Hull)
 		for _, Rider in ipairs(Crew) do
 			if Rider.Character and Rider.Weld.Parent then
 				table.insert(Bodies, Rider.Character)
+				for _, Part in ipairs(Rider.Character:GetChildren()) do
+					if Part:IsA("BasePart") and Part.Transparency < 1 then
+						table.insert(Shapes, Part)
+					end
+				end
 			end
 		end
+		local Obstacles: { Instance } = {}
 		for _, Body in ipairs(Bodies) do
 			local Box, Size = Body:GetBoundingBox()
-			if #Workspace:GetPartBoundsInBox(Box, Size, Params) > 0 then
+			for _, Part in ipairs(Workspace:GetPartBoundsInBox(Box, Size, Near)) do
+				if Part.Transparency < 1 then
+					table.insert(Obstacles, Part)
+				end
+			end
+		end
+		if #Obstacles == 0 then
+			return
+		end
+		Touch.FilterDescendantsInstances = Obstacles
+		for _, Part in ipairs(Shapes) do
+			if #Workspace:GetPartsInPart(Part, Touch) > 0 then
 				Crash()
 				Remotemanager:FireServer("GliderService", "Crash")
 				return
@@ -249,11 +301,17 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		end
 	end)
 
+	local Died = Humanoid.Died:Connect(function()
+		self:Finish()
+	end)
+
 	self.flight = {
-		Connections = { Loop, Look },
+		Connections = { Loop, Look, Died },
+		Wind = Wind,
 		Crash = Crash,
 		Ring = function()
 			Boost = RingBoost
+			Sfx.Play(Sounds.Flight.Boost, BoostVolume)
 		end,
 	}
 end
@@ -267,6 +325,7 @@ function GliderController:Finish()
 	for _, Connection in ipairs(Flight.Connections) do
 		Connection:Disconnect()
 	end
+	Flight.Wind:Destroy()
 	Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
@@ -286,6 +345,21 @@ function GliderController:Init()
 		if self.flight then
 			self.flight.Crash()
 		end
+	end)
+	Remotemanager:OnClientEvent("GliderService", "Revived", function(Name, Start)
+		self.launching = false
+		self:Finish()
+		self:Begin(Name, Start)
+		Transition:Reveal(Player.Character)
+	end)
+	Remotemanager:OnClientEvent("GliderService", "Respawning", function()
+		local Character = Player.Character
+		Transition:Play(Character, function()
+			while self.flight do
+				task.wait()
+			end
+			return Character
+		end)
 	end)
 	Remotemanager:OnClientEvent("GliderService", "Ring", function()
 		if self.flight then

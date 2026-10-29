@@ -1,3 +1,5 @@
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -11,13 +13,14 @@ local InventoryService = {
 		GetState = "Function",
 		Equip = "Event",
 		Unequip = "Event",
+		Buy = "Event",
 		Updated = "Event",
 	},
 }
 
 type Catalog = {
 	Default: string,
-	List: { { Name: string } },
+	List: { { Name: string, Gamepass: number? } },
 }
 
 type Inventory = {
@@ -30,7 +33,7 @@ local Catalogs: { [string]: Catalog } = {
 	Trails = require(ReplicatedStorage.Shared.Config.Trails),
 }
 
-local StudioUnlocked: { [string]: boolean } = { Trails = true }
+local StudioUnlocked: { [string]: boolean } = {}
 local Testing = RunService:IsStudio()
 
 local function Unlocked(Category: string): boolean
@@ -38,10 +41,13 @@ local function Unlocked(Category: string): boolean
 end
 
 local Items: { [string]: { [string]: boolean } } = {}
+local Gamepasses: { [string]: { [string]: number } } = {}
 for Category, Catalog in pairs(Catalogs) do
 	Items[Category] = {}
+	Gamepasses[Category] = {}
 	for _, Entry in ipairs(Catalog.List) do
 		Items[Category][Entry.Name] = true
+		Gamepasses[Category][Entry.Name] = Entry.Gamepass
 	end
 end
 
@@ -76,9 +82,27 @@ function InventoryService:Push(Player: Player)
 	Remotemanager:FireClient(self.Name, "Updated", Player, self:EnsurePlayer(Player))
 end
 
-function InventoryService:Give(Player: Player, Category: string, Name: string)
-	self:EnsurePlayer(Player)[Category].Owned[Name] = true
+function InventoryService:Give(Player: Player, Category: string, Name: string): boolean
+	local Owned = self:EnsurePlayer(Player)[Category].Owned
+	if Owned[Name] then
+		return false
+	end
+	Owned[Name] = true
 	self:Push(Player)
+	return true
+end
+
+function InventoryService:Take(Player: Player, Category: string, Name: string): boolean
+	local Inventory = self:EnsurePlayer(Player)[Category]
+	if not Inventory.Owned[Name] or Name == Catalogs[Category].Default then
+		return false
+	end
+	Inventory.Owned[Name] = nil
+	if Inventory.Equipped == Name then
+		Inventory.Equipped = Catalogs[Category].Default
+	end
+	self:Push(Player)
+	return true
 end
 
 function InventoryService:Equip(Player: Player, Category: any, Name: any)
@@ -97,6 +121,43 @@ function InventoryService:Unequip(Player: Player, Category: any, Name: any)
 	end
 	Inventory.Equipped = Catalogs[Category].Default
 	self:Push(Player)
+end
+
+function InventoryService:Buy(Player: Player, Category: any, Name: any)
+	local Passes = Gamepasses[Category]
+	local Id = Passes and Passes[Name]
+	if not Id or not Core:GetService("DataService"):IsLoaded(Player) then
+		return
+	end
+	if Id == 0 then
+		self:Give(Player, Category, Name)
+	else
+		MarketplaceService:PromptGamePassPurchase(Player, Id)
+	end
+end
+
+function InventoryService:Grant(Player: Player, Id: number)
+	for Category, Passes in pairs(Gamepasses) do
+		for Name, Pass in pairs(Passes) do
+			if Pass == Id then
+				self:Give(Player, Category, Name)
+			end
+		end
+	end
+end
+
+function InventoryService:CheckGamepasses(Player: Player)
+	Core:GetService("DataService"):WaitForLoad(Player)
+	for _, Passes in pairs(Gamepasses) do
+		for _, Id in pairs(Passes) do
+			if Id ~= 0 and Player.Parent then
+				local Success, Owned = pcall(MarketplaceService.UserOwnsGamePassAsync, MarketplaceService, Player.UserId, Id)
+				if Success and Owned then
+					self:Grant(Player, Id)
+				end
+			end
+		end
+	end
 end
 
 function InventoryService:Init()
@@ -140,6 +201,23 @@ function InventoryService:Init()
 	Remotemanager:OnServerEvent(self.Name, "Unequip", function(Player, Category, Name)
 		self:Unequip(Player, Category, Name)
 	end)
+	Remotemanager:OnServerEvent(self.Name, "Buy", function(Player, Category, Name)
+		self:Buy(Player, Category, Name)
+	end)
+	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(Player, Id, Purchased)
+		if Purchased then
+			self:Grant(Player, Id)
+		end
+	end)
+end
+
+function InventoryService:Start()
+	Players.PlayerAdded:Connect(function(Player)
+		self:CheckGamepasses(Player)
+	end)
+	for _, Player in ipairs(Players:GetPlayers()) do
+		task.spawn(self.CheckGamepasses, self, Player)
+	end
 end
 
 return InventoryService

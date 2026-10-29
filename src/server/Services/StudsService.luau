@@ -35,9 +35,18 @@ function StudsService:Push(Player: Player, Gained: number)
 	Remotemanager:FireClient(self.Name, "Updated", Player, self:EnsurePlayer(Player).Value, Gained)
 end
 
-function StudsService:Add(Player: Player, Amount: number)
+function StudsService:Credit(Player: Player, Amount: number)
 	self:EnsurePlayer(Player).Value += Amount
+end
+
+function StudsService:Add(Player: Player, Amount: number)
+	self:Credit(Player, Amount)
 	self:Push(Player, Amount)
+end
+
+function StudsService:Set(Player: Player, Amount: number)
+	self:EnsurePlayer(Player).Value = Amount
+	self:Push(Player, 0)
 end
 
 function StudsService:Spend(Player: Player, Amount: number): boolean

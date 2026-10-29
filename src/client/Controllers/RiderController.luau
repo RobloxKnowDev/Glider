@@ -101,6 +101,11 @@ function RiderController:Steer(Rider: Rider, Offset: number)
 	Rider.Target = Offset
 end
 
+function RiderController:Reset(Rider: Rider)
+	Rider.Offset = Rider.Weld:GetAttribute("Offset")
+	Rider.Target = nil
+end
+
 function RiderController:Init()
 	local Folder = Workspace:WaitForChild("Gliders")
 	local function Board(Glider: Instance)

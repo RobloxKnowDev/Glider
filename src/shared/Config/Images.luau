@@ -6,6 +6,15 @@ local Images: { [string]: { [string]: string } } = {
 		Galaxy = "rbxassetid://97934991435882",
 		Rainbow = "rbxassetid://133941371077541",
 	},
+	Crate = {
+		BasicTrail = "rbxassetid://0",
+		BasicGlider = "rbxassetid://0",
+		Halloween = "rbxassetid://0",
+	},
+	Counter = {
+		Revive = "rbxassetid://81684269350830",
+		Skip = "rbxassetid://86388513989558",
+	},
 }
 
 return Images
