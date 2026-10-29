@@ -33,8 +33,6 @@ type Card = {
 local Player = Players.LocalPlayer
 local SentTime = 5
 local DeclinedTime = 3
-local TabVolume = 0.5
-local SendVolume = 0.5
 local InvitedVolume = 0.7
 local DeclinedVolume = 0.5
 local BusyStyle: Style = {
@@ -126,7 +124,6 @@ function PlayController:Add(Other: Player)
 			return
 		end
 		self:Hold(Card, "Sent", SentTime)
-		Sfx.Play(Sounds.Duo.Send, SendVolume)
 		Remotemanager:FireServer("DuoService", "Invite", Other)
 	end)
 	for _, Attribute in ipairs({ "Flying", "Grouped" }) do
@@ -246,11 +243,9 @@ function PlayController:Init()
 	DuoButton.Activated:Connect(function()
 		Page(true)
 		UiFade.Pop(DuoPage)
-		Sfx.Play(Sounds.Ui.Tab, TabVolume)
 	end)
 	DuoCloseButton.Activated:Connect(function()
 		Page(false)
-		Sfx.Play(Sounds.Ui.Tab, TabVolume)
 	end)
 	MainFrame:GetPropertyChangedSignal("Visible"):Connect(function()
 		Page(false)

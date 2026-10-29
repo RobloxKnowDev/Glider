@@ -17,7 +17,7 @@ local Popdirection = Enum.EasingDirection.Out
 local Hoverscale = 1.08
 local Pressscale = 0.95
 local Hoverinfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-local Hovervolume = 0.25
+local Hovervolume = 0.7
 local Clickvolume = 0.5
 
 local Fadeproperties = {
@@ -113,13 +113,21 @@ local function Playsize(Button: GuiButton, Goalsize: UDim2, Info: TweenInfo)
 	Tween:Play()
 end
 
+function Uifade.Hover()
+	Sfx.Play(Sounds.Ui.Hover, Hovervolume)
+end
+
+function Uifade.Click()
+	Sfx.Play(Sounds.Ui.Click, Clickvolume)
+end
+
 local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> (), Reset: () -> ())
 	local Hovering = false
 
 	Button.MouseEnter:Connect(function()
 		Hovering = true
 		Animate(Hoverscale)
-		Sfx.Play(Sounds.Ui.Hover, Hovervolume)
+		Uifade.Hover()
 	end)
 	Button.MouseLeave:Connect(function()
 		Hovering = false
@@ -128,7 +136,7 @@ local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> ()
 	Button.SelectionGained:Connect(function()
 		Hovering = true
 		Animate(Hoverscale)
-		Sfx.Play(Sounds.Ui.Hover, Hovervolume)
+		Uifade.Hover()
 	end)
 	Button.SelectionLost:Connect(function()
 		Hovering = false
@@ -136,7 +144,7 @@ local function Bindstates(Button: GuiButton, Animate: (Multiplier: number) -> ()
 	end)
 	Button.MouseButton1Down:Connect(function()
 		Animate(Pressscale)
-		Sfx.Play(Sounds.Ui.Click, Clickvolume)
+		Uifade.Click()
 	end)
 	Button.MouseButton1Up:Connect(function()
 		Animate(if Hovering then Hoverscale else 1)

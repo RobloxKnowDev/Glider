@@ -6,6 +6,7 @@ local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
+local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 
@@ -16,13 +17,16 @@ local StoreController = {
 
 type Pack = {
 	Name: string,
+	Product: number?,
 	Gamepass: number?,
+	Price: number?,
 }
 
 local NoticeStyle: GainBurst.Style = {
 	Color = Color3.new(1, 1, 1),
 	Stroke = Color3.new(0, 0, 0),
 }
+local Robux = "\u{E002}"
 local OwnedStyle = {
 	Background = Color3.fromRGB(110, 110, 110),
 	Stroke = Color3.fromRGB(150, 150, 150),
@@ -73,6 +77,14 @@ function StoreController:Init()
 				Remotemanager:FireServer("StoreService", "Buy", Section, Pack.Name)
 			end
 		end)
+		if (Pack.Gamepass or Pack.Product) ~= 0 then
+			task.spawn(function()
+				local Price = RobuxPrice(Pack)
+				if Price and not self.owned[Key] then
+					Translation.Raw(Button:WaitForChild("Text") :: TextLabel, Price .. Robux)
+				end
+			end)
+		end
 	end
 	for _, Pack in ipairs(Store.Cash) do
 		Bind(Scrolling:WaitForChild(Pack.Name):WaitForChild("Frame"):WaitForChild("BuyButton") :: GuiButton, "Cash", Pack)

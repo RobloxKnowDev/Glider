@@ -15,6 +15,13 @@ local Images: { [string]: { [string]: string } } = {
 		Revive = "rbxassetid://81684269350830",
 		Skip = "rbxassetid://86388513989558",
 	},
+	Music = {
+		On = "rbxassetid://17387359605",
+		Off = "rbxassetid://14861956881",
+	},
+	Timer = {
+		Leave = "rbxassetid://130822903187331",
+	},
 }
 
 return Images

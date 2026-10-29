@@ -27,7 +27,7 @@ local Maximumpurchases = 100
 local Maximumsize = 4_000_000
 local Maximumdepth = 32
 local Shutdowndeadline = 27
-local Sectionorder = { "Settings", "Studs", "Gliders", "Trails", "Revives", "Skips", "Spins", "Passes" }
+local Sectionorder = { "Settings", "Studs", "Gliders", "Trails", "Revives", "Skips", "Spins", "Passes", "Record" }
 
 type Section = {
 	Load: (Player, any) -> (),

@@ -64,6 +64,7 @@ function DuoService:Form(Owner: Player, Member: Player)
 	for _, Player in ipairs({ Owner, Member }) do
 		Groups[Player] = Group
 		Player:SetAttribute("Grouped", true)
+		Core:GetService("LevelService"):Reset(Player)
 		Remotemanager:FireClient(self.Name, "Grouped", Player, Owner, Member)
 	end
 end
@@ -76,9 +77,18 @@ function DuoService:Leave(Player: Player)
 	for _, Other in ipairs({ Group.Owner, Group.Member }) do
 		Groups[Other] = nil
 		Other:SetAttribute("Grouped", nil)
+		Core:GetService("LevelService"):Reset(Other)
 		Remotemanager:FireClient(self.Name, "Grouped", Other, nil, nil)
 		Core:GetService("GliderService"):Wreck(Other)
 	end
+end
+
+function DuoService:Team(Player: Player): { Player }
+	local Group = Groups[Player]
+	if Group then
+		return { Group.Owner, Group.Member }
+	end
+	return { Player }
 end
 
 function DuoService:Launch(Player: Player)

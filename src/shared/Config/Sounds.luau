@@ -2,17 +2,9 @@ local Sounds: { [string]: { [string]: string } } = {
 	Ui = {
 		Hover = "rbxassetid://17208339919",
 		Click = "rbxassetid://17208396156",
-		Open = "rbxassetid://17208204604",
-		Close = "rbxassetid://17208186900",
-		Tab = "rbxassetid://17208408337",
 		Negative = "rbxassetid://17208353912",
 	},
-	Inventory = {
-		Equip = "rbxassetid://17208323435",
-		Unequip = "rbxassetid://15675081158",
-	},
 	Duo = {
-		Send = "rbxassetid://17208399163",
 		Invited = "rbxassetid://17208361335",
 		Declined = "rbxassetid://17208372272",
 	},
@@ -21,7 +13,7 @@ local Sounds: { [string]: { [string]: string } } = {
 		Open = "rbxassetid://15675024286",
 	},
 	Flight = {
-		Launch = "rbxassetid://9125648149",
+		Launch = "rbxassetid://9125598032",
 		Wind = "rbxassetid://9125742262",
 		Gust = "rbxassetid://9125805579",
 		Boost = "rbxassetid://9126229255",
@@ -31,8 +23,11 @@ local Sounds: { [string]: { [string]: string } } = {
 	Ring = {
 		Pass = "rbxassetid://9126073001",
 	},
+	Music = {
+		Main = "rbxassetid://83866396320328",
+	},
 	Studs = {
-		Gain = "rbxassetid://9113849492",
+		Gain = "rbxassetid://127645268874265",
 		Land = "rbxassetid://16480551554",
 	},
 	Crate = {

@@ -15,6 +15,7 @@ local Settingsservice = {
 local Defaults = {
 	Graphism = true,
 	Effect = true,
+	Music = true,
 	MusicVolume = 0.75,
 	SoundEffect = 0.75,
 }

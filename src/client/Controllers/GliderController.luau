@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
@@ -17,10 +18,14 @@ local GliderController = {
 local Player = Players.LocalPlayer
 
 local ForwardSpeed = 30
+local LevelSpeed = 3
 local SinkSpeed = 6
 local WindLiftSpeed = 25
 local LiftResponse = 6
 local SinkResponse = 2
+local TurbinePush = 30
+local PushResponse = 3
+local DriftResponse = 1.5
 local RingBoost = 12
 local BoostResponse = 1.5
 local MaxBank = math.rad(30)
@@ -44,8 +49,11 @@ local ReturnDelay = 2.5
 local ReturnResponse = 3
 local CrashDistance = 18
 local CrashResponse = 4
+local RingFieldOfView = 10
+local KickInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local SettleInfo = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
 
-local LaunchVolume = 0.7
+local LaunchVolume = 1.5
 local WindVolume = 0.35
 local WindMin = 0.8
 local WindMax = 1.4
@@ -58,6 +66,13 @@ local function Approach(Current: number, Target: number, Response: number, Dt: n
 	return Current + (Target - Current) * (1 - math.exp(-Response * Dt))
 end
 
+local function Within(Zone: BasePart, Point: Vector3): boolean
+	local Local = Zone.CFrame:PointToObjectSpace(Point)
+	return math.abs(Local.X) <= Zone.Size.X / 2
+		and math.abs(Local.Y) <= Zone.Size.Y / 2
+		and math.abs(Local.Z) <= Zone.Size.Z / 2
+end
+
 function GliderController:Begin(Name: string, Start: CFrame)
 	local Character = Player.Character
 	local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
@@ -65,6 +80,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Folder = Workspace:WaitForChild("Gliders")
 	local Rings = Workspace:WaitForChild("RingsFolder")
 	local Windzones = Workspace:WaitForChild("Windzones")
+	local TurbineZones = Workspace:WaitForChild("WindTurbineZones")
 	local Glider = Folder:WaitForChild(Name) :: Model
 	local Bar = Glider:WaitForChild("Bar") :: BasePart
 	local Frame: CFrame = Glider:GetAttribute("Frame")
@@ -72,6 +88,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Limit: number = Glider:GetAttribute("Limit")
 	local Pilot = Glider:GetAttribute("Pilot") == Player.UserId
 
+	local SceneryController = Core:GetController("SceneryController")
 	local RiderController = Core:GetController("RiderController")
 	local Seats = Glider:WaitForChild("Riders")
 	local Mine = Seats:WaitForChild(tostring(Player.UserId)) :: Weld
@@ -106,6 +123,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local _, Yaw = Start:ToOrientation()
 	local Bank = 0
 	local Climb = -SinkSpeed
+	local Drift = Vector3.zero
 	local Boost = 0
 	local Sendtimer = 0
 	local OrbitYaw = 0
@@ -158,6 +176,9 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			Camera.CFrame = CFrame.lookAt(Watch, Head.Position)
 			return
 		end
+		if self.launching then
+			return
+		end
 
 		local View = Camera.CFrame.LookVector
 		local Offset = math.clamp(
@@ -184,26 +205,29 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		Total += Offset
 
 		local Inside = false
-		for _, Child in ipairs(Windzones:GetChildren()) do
-			local Zone = Child :: BasePart
-			local Local = Zone.CFrame:PointToObjectSpace(Position)
-			if
-				math.abs(Local.X) <= Zone.Size.X / 2
-				and math.abs(Local.Y) <= Zone.Size.Y / 2
-				and math.abs(Local.Z) <= Zone.Size.Z / 2
-			then
+		for _, Zone in ipairs(Windzones:GetChildren()) do
+			if Within(Zone :: BasePart, Position) then
 				Inside = true
 				break
 			end
 		end
-		if Inside and not Gusting then
+		local Push: Vector3? = nil
+		for _, Child in ipairs(TurbineZones:GetChildren()) do
+			local Zone = Child :: BasePart
+			if Within(Zone, Position) then
+				Push = Zone.CFrame.LookVector * TurbinePush
+				break
+			end
+		end
+		local Blowing = Inside or Push ~= nil
+		if Blowing and not Gusting then
 			Sfx.Play(Sounds.Flight.Gust, GustVolume)
 		end
-		Gusting = Inside
+		Gusting = Blowing
 
 		local Heading
 		if Pilot then
-			local Balance = Total / Count / Limit
+			local Balance = math.clamp(Total / Count / (Limit - (Count - 1) * RiderGap / 2), -1, 1)
 			local Lean = math.sign(Balance) * math.max(math.abs(Balance) - Deadzone, 0) / (1 - Deadzone)
 			Bank = Approach(Bank, Lean * MaxBank, BankResponse, Dt)
 			local Turn = Bank / MaxBank * TurnSpeed
@@ -212,8 +236,12 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			Climb = if Inside
 				then Approach(Climb, WindLiftSpeed, LiftResponse, Dt)
 				else Approach(Climb, -SinkSpeed, SinkResponse, Dt)
+			Drift = if Push
+				then Drift:Lerp(Push, 1 - math.exp(-PushResponse * Dt))
+				else Drift:Lerp(Vector3.zero, 1 - math.exp(-DriftResponse * Dt))
 			Boost = Approach(Boost, 0, BoostResponse, Dt)
-			local Velocity = Heading.LookVector * (ForwardSpeed + Boost) + Vector3.yAxis * Climb
+			local Speed = ForwardSpeed + (Glider:GetAttribute("Level") - 1) * LevelSpeed
+			local Velocity = Heading.LookVector * (Speed + Boost) + Vector3.yAxis * Climb + Drift
 			Position += Velocity * Dt
 			Bar.CFrame = CFrame.new(Position) * Heading * CFrame.Angles(0, 0, -Bank) * Unframe
 			Bar.AssemblyLinearVelocity = Velocity
@@ -260,7 +288,8 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		if not Pilot then
 			return
 		end
-		local Ghosts: { Instance } = { Folder, Rings, Windzones }
+		SceneryController:Pose()
+		local Ghosts: { Instance } = { Folder, Rings, Windzones, TurbineZones }
 		for _, Other in ipairs(Players:GetPlayers()) do
 			if Other.Character then
 				table.insert(Ghosts, Other.Character)
@@ -312,6 +341,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		Ring = function()
 			Boost = RingBoost
 			Sfx.Play(Sounds.Flight.Boost, BoostVolume)
+			self:Kick()
 		end,
 	}
 end
@@ -330,7 +360,19 @@ function GliderController:Finish()
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
 
+function GliderController:Kick()
+	local Camera = Workspace.CurrentCamera
+	local Kick = TweenService:Create(Camera, KickInfo, { FieldOfView = self.fieldOfView + RingFieldOfView })
+	Kick.Completed:Once(function(State)
+		if State == Enum.PlaybackState.Completed then
+			TweenService:Create(Camera, SettleInfo, { FieldOfView = self.fieldOfView }):Play()
+		end
+	end)
+	Kick:Play()
+end
+
 function GliderController:Init()
+	self.fieldOfView = Workspace.CurrentCamera.FieldOfView
 	local Transition = Core:GetController("TransitionController")
 	Remotemanager:OnClientEvent("GliderService", "Launching", function()
 		self.launching = true

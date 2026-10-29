@@ -73,10 +73,16 @@ local LockedStyle: Style = {
 local TickScale = 1.35
 local TickInfo = TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local PayVolume = 0.6
-local OpenVolume = 0.7
+local OpenVolume = 1.2
 local TickVolume = 0.35
 local TickPitch = 0.08
-local RevealVolume = 0.8
+local RevealVolume = {
+	Common = 0.5,
+	Rare = 0.9,
+	Epic = 4,
+	Legendary = 1,
+	Mythic = 5,
+}
 local DuplicateVolume = 0.6
 local RefusedVolume = 0.6
 
@@ -269,7 +275,7 @@ function CrateController:Reveal()
 	self.spin = nil
 	self.revealed = os.clock() + RevealTime
 	local Entry: Entry = self.entries[self.prize.Category][self.prize.Name]
-	Sfx.Play(Sounds.Reveal[Entry.Rarity], RevealVolume)
+	Sfx.Play(Sounds.Reveal[Entry.Rarity], RevealVolume[Entry.Rarity])
 	if self.refund > 0 then
 		Sfx.Play(Sounds.Crate.Duplicate, DuplicateVolume)
 	end
@@ -377,6 +383,7 @@ function CrateController:Init()
 	ProximityPromptService.PromptTriggered:Connect(function(Prompt)
 		local Crate = (Prompt.Parent :: Instance).Parent :: Instance
 		if Crate.Parent == self.folder then
+			UiFade.Click()
 			self:Show(Prompt)
 		end
 	end)

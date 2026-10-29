@@ -20,6 +20,7 @@ local GliderService = {
 		Crash = "Event",
 		Revive = "Event",
 		Continue = "Event",
+		Quit = "Event",
 		Launching = "Event",
 		Started = "Event",
 		Crashed = "Event",
@@ -38,6 +39,12 @@ type Ring = {
 	Radius: number,
 }
 
+type Level = {
+	Spawn: BasePart,
+	Finish: BasePart,
+	Revives: { BasePart },
+}
+
 type Rider = {
 	Weld: Weld,
 	Character: Model,
@@ -47,21 +54,17 @@ type Rider = {
 	Ragdoll: Ragdoll.Handle?,
 }
 
-type Sample = {
-	Time: number,
-	Frame: CFrame,
-}
-
 type Flight = {
 	Glider: Model,
 	Bar: BasePart,
 	Frame: CFrame,
 	Limit: number,
+	Level: number,
 	Last: Vector3,
 	Collected: { [Model]: boolean },
 	Crashed: boolean,
+	Passing: boolean,
 	Pilot: Player,
-	History: { Sample },
 	Deciding: boolean,
 	Deadline: number?,
 	Remaining: number,
@@ -79,13 +82,6 @@ local RespawnTime = 2
 local VoidMargin = 60
 local ReviveTime = 10
 local ResumeTime = 3
-local RewindTime = 3
-local ScanDirections = 24
-local ScanDistance = 300
-local ScanDrop = 0.2
-local ScanBias = 40
-local Flat = Vector3.new(1, 0, 1)
-local HistoryInterval = 0.2
 local RiderGap = 3
 local RiderMargin = 1.5
 local SpawnSpacing = 4
@@ -169,7 +165,8 @@ function GliderService:Launch(Team: { Player })
 	end
 
 	local Host = Team[1]
-	local Start = Facing(self.spawn, 0)
+	local Index = Core:GetService("LevelService"):Get(Host)
+	local Start = Facing(self.levels[Index].Spawn, 0)
 	local Inventory = Core:GetService("InventoryService")
 	local Glider = (self.models:WaitForChild(Inventory:GetEquipped(Host, "Gliders")) :: Model):Clone()
 	local Bar = Glider:WaitForChild("Bar") :: BasePart
@@ -192,6 +189,7 @@ function GliderService:Launch(Team: { Player })
 	Glider:SetAttribute("Frame", Frame)
 	Glider:SetAttribute("Limit", Limit)
 	Glider:SetAttribute("Pilot", Host.UserId)
+	Glider:SetAttribute("Level", Index)
 
 	local Seats = Instance.new("Folder")
 	Seats.Name = "Riders"
@@ -202,11 +200,12 @@ function GliderService:Launch(Team: { Player })
 		Bar = Bar,
 		Frame = Frame,
 		Limit = Limit,
+		Level = Index,
 		Last = Start.Position,
 		Collected = {},
 		Crashed = false,
+		Passing = false,
 		Pilot = Host,
-		History = { { Time = os.clock(), Frame = Start } },
 		Deciding = false,
 		Deadline = nil,
 		Remaining = 0,
@@ -261,8 +260,101 @@ function GliderService:Launch(Team: { Player })
 				self:Leave(Player)
 			end)
 		)
-		Remotemanager:FireClient(self.Name, "Started", Player, Glider.Name, Start, self.finish.Position)
+		Remotemanager:FireClient(self.Name, "Started", Player, Glider.Name, Start, self.route)
+		Core:GetService("RecordService"):Resume(Player)
 	end
+end
+
+function GliderService:Arrived(Flight: Flight): boolean
+	local Bodies: { Instance } = { Flight.Glider }
+	for _, Rider in pairs(Flight.Riders) do
+		table.insert(Bodies, Rider.Character)
+	end
+	self.touch.FilterDescendantsInstances = Bodies
+	return #Workspace:GetPartsInPart(self.levels[Flight.Level].Finish, self.touch) > 0
+end
+
+function GliderService:Advance(Flight: Flight)
+	local Next = Flight.Level + 1
+	for Player in pairs(Flight.Riders) do
+		Core:GetService("LevelService"):Reach(Player, Next)
+	end
+	if self.levels[Next] then
+		Flight.Level = Next
+		Flight.Glider:SetAttribute("Level", Next)
+		return
+	end
+	for Player in pairs(Flight.Riders) do
+		Core:GetService("RecordService"):Finish(Player)
+	end
+	self:Dismount(Flight)
+	for Player in pairs(Flight.Riders) do
+		Core:GetService("LevelService"):Reset(Player)
+	end
+end
+
+function GliderService:Dismount(Flight: Flight)
+	Flight.Passing = true
+	Freeze(Flight.Glider, true)
+	for Player, Rider in pairs(Flight.Riders) do
+		Freeze(Rider.Character, true)
+		Rider.Weld.Enabled = false
+		Remotemanager:FireClient(self.Name, "Launching", Player)
+	end
+	task.wait(LaunchDelay)
+	if Active[Flight] and not Flight.Crashed then
+		self:Recover(Flight)
+	end
+end
+
+function GliderService:Skippable(Player: Player): boolean
+	if Pending[Player] then
+		return false
+	end
+	local Flight = Flights[Player]
+	if Flight then
+		return not Flight.Crashed and not Flight.Passing and self.levels[Flight.Level + 1] ~= nil
+	end
+	return self.levels[Core:GetService("LevelService"):Get(Player) + 1] ~= nil
+end
+
+function GliderService:Skip(Player: Player)
+	local LevelService = Core:GetService("LevelService")
+	local RecordService = Core:GetService("RecordService")
+	local Flight = Flights[Player]
+	if not Flight then
+		local Next = LevelService:Get(Player) + 1
+		local Team = Core:GetService("DuoService"):Team(Player)
+		for Index, Member in ipairs(Team) do
+			LevelService:Reach(Member, Next)
+			RecordService:Taint(Member)
+			if not self:IsFlying(Member) and Alive(Member) then
+				LevelService:Land(Member, Member.Character :: Model, (Index - (#Team + 1) / 2) * SpawnSpacing)
+			end
+		end
+		return
+	end
+
+	for Rider in pairs(Flight.Riders) do
+		LevelService:Reach(Rider, Flight.Level + 1)
+		RecordService:Taint(Rider)
+	end
+	self:Dismount(Flight)
+end
+
+function GliderService:Quit(Player: Player)
+	local Flight = Flights[Player]
+	if not Flight or Flight.Passing or (Flight.Crashed and not Flight.Deciding) then
+		return
+	end
+	for Rider in pairs(Flight.Riders) do
+		Core:GetService("LevelService"):Reset(Rider)
+	end
+	if Flight.Crashed then
+		self:Respawn(Flight)
+		return
+	end
+	self:Dismount(Flight)
 end
 
 function GliderService:Move(Player: Player, Offset: any)
@@ -291,30 +383,16 @@ function GliderService:Center(Flight: Flight)
 	end
 end
 
-function GliderService:Aim(Position: Vector3, Radius: number): CFrame
-	local Ignored = table.clone(self.ghosts)
-	for _, Player in ipairs(Players:GetPlayers()) do
-		if Player.Character then
-			table.insert(Ignored, Player.Character)
+function GliderService:Nearest(Flight: Flight): CFrame
+	local Level = self.levels[Flight.Level]
+	local Best, Distance = Level.Spawn, math.huge
+	for _, Part in ipairs(Level.Revives) do
+		local Gap = (Part.Position - Flight.Last).Magnitude
+		if Gap < Distance then
+			Best, Distance = Part, Gap
 		end
 	end
-	local Params = RaycastParams.new()
-	Params.FilterType = Enum.RaycastFilterType.Exclude
-	Params.FilterDescendantsInstances = Ignored
-	Params.RespectCanCollide = true
-
-	local Toward = ((self.finish.Position - Position) * Flat).Unit
-	local Best, Score = 0, -math.huge
-	for Index = 1, ScanDirections do
-		local Yaw = Index / ScanDirections * 2 * math.pi
-		local Ahead = CFrame.Angles(0, Yaw, 0).LookVector
-		local Hit = Workspace:Spherecast(Position, Radius, (Ahead - Vector3.yAxis * ScanDrop).Unit * ScanDistance, Params)
-		local Value = (if Hit then Hit.Distance else ScanDistance) + ScanBias * Ahead:Dot(Toward)
-		if Value > Score then
-			Best, Score = Yaw, Value
-		end
-	end
-	return CFrame.new(Position) * CFrame.Angles(0, Best, 0)
+	return Facing(Best, 0)
 end
 
 function GliderService:Collect(Flight: Flight)
@@ -340,17 +418,6 @@ function GliderService:Collect(Flight: Flight)
 	Flight.Last = Position
 end
 
-function GliderService:Record(Flight: Flight, Now: number)
-	local History = Flight.History
-	if Now - History[#History].Time < HistoryInterval then
-		return
-	end
-	table.insert(History, { Time = Now, Frame = Flight.Bar.CFrame * Flight.Frame })
-	while Now - History[1].Time > RewindTime do
-		table.remove(History, 1)
-	end
-end
-
 function GliderService:Crash(Flight: Flight, Final: boolean)
 	if Flight.Crashed then
 		if Final and Flight.Deciding then
@@ -363,6 +430,7 @@ function GliderService:Crash(Flight: Flight, Final: boolean)
 		Rider.Weld.Enabled = false
 		Rider.Ragdoll = Ragdoll.Enable(Rider.Character)
 		Remotemanager:FireClient(self.Name, "Crashed", Player)
+		Core:GetService("RecordService"):Pause(Player)
 	end
 	if Final then
 		self:Respawn(Flight)
@@ -459,7 +527,7 @@ function GliderService:Revive(Flight: Flight)
 		return
 	end
 
-	local Start = self:Aim(Flight.History[1].Frame.Position, Flight.Limit + RiderMargin)
+	local Start = self:Nearest(Flight)
 	Freeze(Flight.Glider, false)
 	Flight.Glider:PivotTo(Start * Flight.Frame:Inverse() * Flight.Bar.CFrame:ToObjectSpace(Flight.Glider:GetPivot()))
 	Flight.Bar.AssemblyLinearVelocity = Vector3.zero
@@ -473,10 +541,10 @@ function GliderService:Revive(Flight: Flight)
 	self:Center(Flight)
 	Flight.Bar:SetNetworkOwner(Flight.Pilot)
 	Flight.Last = Start.Position
-	Flight.History = { { Time = os.clock(), Frame = Start } }
 	Flight.Crashed = false
 	for Player in pairs(Flight.Riders) do
 		Remotemanager:FireClient(self.Name, "Revived", Player, Flight.Glider.Name, Start)
+		Core:GetService("RecordService"):Resume(Player)
 	end
 end
 
@@ -499,14 +567,14 @@ function GliderService:Recover(Flight: Flight)
 		Count += 1
 	end
 	local Index = 0
-	for _, Rider in pairs(Flight.Riders) do
+	for Player, Rider in pairs(Flight.Riders) do
 		Index += 1
-		Ragdoll.Disable(Rider.Ragdoll :: Ragdoll.Handle)
+		if Rider.Ragdoll then
+			Ragdoll.Disable(Rider.Ragdoll)
+			Rider.Ragdoll = nil
+		end
+		Core:GetService("LevelService"):Land(Player, Rider.Character, (Index - (Count + 1) / 2) * SpawnSpacing)
 		Freeze(Rider.Character, false)
-		local Spot = Facing(self.respawn, self.respawn.Size.Y / 2 + Rider.Humanoid.HipHeight + Rider.Root.Size.Y / 2)
-		Rider.Character:PivotTo(Spot * CFrame.new((Index - (Count + 1) / 2) * SpawnSpacing, 0, 0))
-		Rider.Root.AssemblyLinearVelocity = Vector3.zero
-		Rider.Root.AssemblyAngularVelocity = Vector3.zero
 	end
 	self:Stop(Flight)
 end
@@ -524,6 +592,7 @@ function GliderService:Stop(Flight: Flight)
 		Player:SetAttribute("Flying", nil)
 		Rider.Humanoid.PlatformStand = false
 		Remotemanager:FireClient(self.Name, "Stopped", Player)
+		Core:GetService("RecordService"):Pause(Player)
 	end
 	Flight.Glider:Destroy()
 end
@@ -539,6 +608,7 @@ function GliderService:Leave(Player: Player)
 	Player:SetAttribute("Flying", nil)
 	Rider.Weld:Destroy()
 	Remotemanager:FireClient(self.Name, "Stopped", Player)
+	Core:GetService("RecordService"):Pause(Player)
 	if not next(Flight.Riders) then
 		self:Stop(Flight)
 		return
@@ -562,7 +632,7 @@ function GliderService:Init()
 	end)
 	Remotemanager:OnServerEvent(self.Name, "Crash", function(Player)
 		local Flight = Flights[Player]
-		if Flight then
+		if Flight and not Flight.Passing then
 			self:Crash(Flight, false)
 		end
 	end)
@@ -571,6 +641,9 @@ function GliderService:Init()
 	end)
 	Remotemanager:OnServerEvent(self.Name, "Continue", function(Player)
 		self:Continue(Player)
+	end)
+	Remotemanager:OnServerEvent(self.Name, "Quit", function(Player)
+		self:Quit(Player)
 	end)
 	MarketplaceService.PromptProductPurchaseFinished:Connect(function(UserId, Product, Purchased)
 		local Player = Players:GetPlayerByUserId(UserId)
@@ -589,18 +662,36 @@ function GliderService:Init()
 end
 
 function GliderService:Start()
-	self.spawn = Workspace:WaitForChild("SpawnPart") :: BasePart
-	self.spawn.Anchored = true
-	self.spawn.CanCollide = false
-	self.spawn.CanQuery = false
-	self.spawn.CanTouch = false
-	self.spawn.Transparency = 1
-	self.respawn = Workspace:WaitForChild("SpawnLocation") :: BasePart
-	self.finish = Workspace:WaitForChild("Finish") :: BasePart
-	self.finish.CanCollide = false
+	local Folder = Workspace:WaitForChild("Level")
+	self.levels = {} :: { Level }
+	self.route = {}
+	for Index = 1, #Folder:GetChildren() do
+		local Stage = Folder:WaitForChild(tostring(Index))
+		local Spawn = Stage:WaitForChild("SpawnPart") :: BasePart
+		Spawn.Anchored = true
+		Spawn.CanCollide = false
+		Spawn.CanQuery = false
+		Spawn.CanTouch = false
+		Spawn.Transparency = 1
+		local Finish = Stage:WaitForChild("Finish") :: BasePart
+		Finish.CanCollide = false
+		local Revives: { BasePart } = {}
+		for _, Child in ipairs(Stage:WaitForChild("Revive"):GetChildren()) do
+			local Part = Child :: BasePart
+			Part.Anchored = true
+			Part.CanCollide = false
+			Part.CanQuery = false
+			Part.CanTouch = false
+			Part.Transparency = 1
+			table.insert(Revives, Part)
+		end
+		table.insert(self.levels, { Spawn = Spawn, Finish = Finish, Revives = Revives })
+		table.insert(self.route, { Spawn = Spawn.Position, Finish = Finish.Position })
+	end
+	self.touch = OverlapParams.new()
+	self.touch.FilterType = Enum.RaycastFilterType.Include
 
 	local Rings = Workspace:WaitForChild("RingsFolder")
-	self.ghosts = { self.folder, Rings, Workspace:WaitForChild("Windzones") }
 	self.rings = {}
 	for _, Model in ipairs(Rings:GetChildren()) do
 		table.insert(self.rings, Measure(Model :: Model))
@@ -609,8 +700,13 @@ function GliderService:Start()
 		local Now = os.clock()
 		for Flight in pairs(Active) do
 			if not Flight.Crashed then
+				if Flight.Passing then
+					continue
+				end
 				self:Collect(Flight)
-				self:Record(Flight, Now)
+				if self:Arrived(Flight) then
+					task.spawn(self.Advance, self, Flight)
+				end
 				continue
 			end
 			self:Guard(Flight)

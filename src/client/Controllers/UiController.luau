@@ -4,8 +4,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
-local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
-local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 
 local UiController = {
@@ -13,8 +11,6 @@ local UiController = {
 	Priority = 5,
 }
 
-local OpenVolume = 0.5
-local CloseVolume = 0.4
 local BlurSize = 16
 local FieldOfViewZoom = 8
 local ShadeTransparency = 0.6
@@ -42,7 +38,6 @@ function UiController:Open(Frame: GuiObject)
 	self.current = Frame
 	Frame.Visible = true
 	UiFade.Pop(Frame)
-	Sfx.Play(Sounds.Ui.Open, OpenVolume)
 end
 
 function UiController:Close()
@@ -52,7 +47,6 @@ function UiController:Close()
 	self.current.Visible = false
 	self.current = nil
 	self:Backdrop(false)
-	Sfx.Play(Sounds.Ui.Close, CloseVolume)
 end
 
 function UiController:Toggle(Frame: GuiObject)

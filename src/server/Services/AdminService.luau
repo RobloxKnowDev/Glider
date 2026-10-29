@@ -183,6 +183,28 @@ Commands = {
 		end,
 	},
 	{
+		Name = "level",
+		Usage = "level <number> [player]",
+		Description = "Set the level and teleport to its SpawnLocation",
+		Arguments = 1,
+		Run = function(Admin, Args)
+			local Levels = Core:GetService("LevelService")
+			local Value = Amount(Args[1], 1)
+			if Value > Levels:Count() then
+				error("There are only " .. Levels:Count() .. " levels", 0)
+			end
+			local Player = Target(Admin, Args[2])
+			if Core:GetService("GliderService"):IsFlying(Player) then
+				error(Player.Name .. " is flying", 0)
+			end
+			Levels:Set(Player, Value)
+			if Player.Character then
+				Levels:Land(Player, Player.Character, 0)
+			end
+			return "Level set to " .. Value .. " - " .. Player.Name
+		end,
+	},
+	{
 		Name = "give",
 		Usage = "give <item|gliders|trails|all> [player]",
 		Description = "Give gliders or trails",

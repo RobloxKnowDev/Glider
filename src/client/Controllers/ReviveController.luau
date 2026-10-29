@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
+local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 
@@ -26,7 +27,7 @@ function ReviveController:Paint()
 	if self.count > 0 then
 		Translation.Set(self.reviveText, "Revive({1})", self.count)
 	else
-		Translation.Set(self.reviveText, "Revive({1})", Single.Price .. Robux)
+		Translation.Set(self.reviveText, "Revive({1})", self.price .. Robux)
 	end
 end
 
@@ -81,6 +82,7 @@ function ReviveController:Init()
 	self.continueText = ContinueButton:WaitForChild("Text") :: TextLabel
 	self.waiting = Waiting
 	self.count = 0
+	self.price = Single.Price
 	self.remaining = 0
 	self.deadline = 0
 	self.paused = false
@@ -124,6 +126,10 @@ end
 function ReviveController:Start()
 	task.spawn(function()
 		self.count = Remotemanager:InvokeServer("ReviveService", "GetRevives")
+		self:Paint()
+	end)
+	task.spawn(function()
+		self.price = RobuxPrice(Single)
 		self:Paint()
 	end)
 end

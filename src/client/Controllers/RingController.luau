@@ -20,7 +20,7 @@ type Float = {
 local FloatHeight = 1
 local FloatSpeed = 1.5
 local PhaseSpread = 0.05
-local PassVolume = 0.7
+local PassVolume = 1.5
 local White = Color3.new(1, 1, 1)
 local GhostScale = 1.8
 local GhostInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -31,13 +31,15 @@ function RingController:Pop(Ring: Model)
 	Sfx.Play(Sounds.Ring.Pass, PassVolume)
 	local Ghost = Ring:Clone()
 	Ghost:WaitForChild("Text"):Destroy()
-	for _, Part in ipairs(Ghost:GetDescendants()) do
-		if Part:IsA("BasePart") then
-			Part.Anchored = true
-			Part.CanCollide = false
-			Part.CanQuery = false
-			Part.CanTouch = false
-			TweenService:Create(Part, GhostInfo, { Transparency = 1 }):Play()
+	for _, Item in ipairs(Ghost:GetDescendants()) do
+		if Item:IsA("BasePart") then
+			Item.Anchored = true
+			Item.CanCollide = false
+			Item.CanQuery = false
+			Item.CanTouch = false
+		end
+		if Item:IsA("BasePart") or Item:IsA("Decal") then
+			TweenService:Create(Item, GhostInfo, { Transparency = 1 }):Play()
 		end
 	end
 	local Scale = Instance.new("NumberValue")

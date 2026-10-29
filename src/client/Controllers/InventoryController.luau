@@ -10,6 +10,7 @@ local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
+local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
@@ -41,6 +42,7 @@ type Catalog = {
 type Card = {
 	Category: string,
 	Name: string,
+	Entry: Entry,
 	Gamepass: boolean,
 	Price: number?,
 	Clone: GuiObject,
@@ -83,8 +85,7 @@ local LockTransparency = 0.6
 local LockZIndex = 10
 local SpinSpeed = math.rad(90)
 local SpinReturnResponse = 8
-local EquipVolume = 0.6
-local LockedVolume = 0.5
+local LockedVolume = 0.6
 
 local function Paint(Card: Card, Style: Style, Text: string)
 	Card.Button.BackgroundColor3 = Style.Background
@@ -145,6 +146,7 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	local Card: Card = {
 		Category = Category,
 		Name = Entry.Name,
+		Entry = Entry,
 		Gamepass = Entry.Gamepass ~= nil,
 		Price = Entry.Price,
 		Clone = Clone,
@@ -169,7 +171,6 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 			return
 		end
 		local Action = if Inventory.Equipped == Card.Name then "Unequip" else "Equip"
-		Sfx.Play(Sounds.Inventory[Action], EquipVolume)
 		Remotemanager:FireServer("InventoryService", Action, Category, Card.Name)
 	end)
 
@@ -256,6 +257,14 @@ function InventoryController:Start()
 	task.spawn(function()
 		self:Apply(Remotemanager:InvokeServer("InventoryService", "GetState"))
 	end)
+	for _, Card in ipairs(self.cards) do
+		if Card.Gamepass then
+			task.spawn(function()
+				Card.Price = RobuxPrice(Card.Entry)
+				self:Apply(self.state)
+			end)
+		end
+	end
 end
 
 return InventoryController

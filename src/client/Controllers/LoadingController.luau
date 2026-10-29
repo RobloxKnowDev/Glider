@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 
 local LoadingController = {
 	Name = "LoadingController",
@@ -28,9 +29,7 @@ local function AddImageId(List: { Instance }, Id: string)
 end
 
 local function AddSoundId(List: { Instance }, Id: string)
-	local Sound = Instance.new("Sound")
-	Sound.SoundId = Id
-	table.insert(List, Sound)
+	table.insert(List, Sfx.Prepare(Id))
 end
 
 function LoadingController:Start()

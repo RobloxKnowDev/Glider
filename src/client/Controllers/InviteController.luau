@@ -12,7 +12,7 @@ local InviteController = {
 }
 
 local Player = Players.LocalPlayer
-local RefusedVolume = 0.5
+local RefusedVolume = 0.6
 
 function InviteController:Init()
 	local Button = Player:WaitForChild("PlayerGui"):WaitForChild("HUD"):WaitForChild("Left"):WaitForChild("InviteButton") :: GuiButton
