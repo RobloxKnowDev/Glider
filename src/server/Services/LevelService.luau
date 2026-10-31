@@ -37,7 +37,7 @@ function LevelService:Set(Player: Player, Level: number)
 end
 
 function LevelService:Count(): number
-	return #self.spawns
+	return self.count
 end
 
 function LevelService:Place(Character: Model, Spawn: BasePart, Shift: number)
@@ -54,15 +54,19 @@ function LevelService:Place(Character: Model, Spawn: BasePart, Shift: number)
 	Root.AssemblyAngularVelocity = Vector3.zero
 end
 
-function LevelService:Land(Player: Player, Character: Model, Shift: number)
-	self:Place(Character, self.spawns[self:Get(Player)] or self.spawns[1], Shift)
+function LevelService:Land(Character: Model, Shift: number)
+	self:Place(Character, self.spawn, Shift)
+end
+
+function LevelService:Visit(Character: Model, Level: number)
+	self:Place(Character, self.folder:WaitForChild(tostring(Level)):WaitForChild("SpawnLocation") :: BasePart, 0)
 end
 
 function LevelService:Track(Player: Player)
 	local function Spawn(Character: Model)
 		Character:WaitForChild("HumanoidRootPart")
 		task.wait()
-		self:Land(Player, Character, 0)
+		self:Land(Character, 0)
 	end
 	Player.CharacterAdded:Connect(Spawn)
 	if Player.Character then
@@ -72,10 +76,9 @@ end
 
 function LevelService:Init()
 	local Folder = Workspace:WaitForChild("Level")
-	self.spawns = {} :: { BasePart }
-	for Index = 1, #Folder:GetChildren() do
-		table.insert(self.spawns, Folder:WaitForChild(tostring(Index)):WaitForChild("SpawnLocation") :: BasePart)
-	end
+	self.folder = Folder
+	self.count = #Folder:GetChildren()
+	self.spawn = Folder:WaitForChild("1"):WaitForChild("SpawnLocation") :: BasePart
 
 	Players.PlayerAdded:Connect(function(Player)
 		self:Track(Player)

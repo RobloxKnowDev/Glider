@@ -185,7 +185,7 @@ Commands = {
 	{
 		Name = "level",
 		Usage = "level <number> [player]",
-		Description = "Set the level and teleport to its SpawnLocation",
+		Description = "Set the level and teleport to its SpawnLocation (the next Play starts from its SpawnPart)",
 		Arguments = 1,
 		Run = function(Admin, Args)
 			local Levels = Core:GetService("LevelService")
@@ -197,10 +197,8 @@ Commands = {
 			if Core:GetService("GliderService"):IsFlying(Player) then
 				error(Player.Name .. " is flying", 0)
 			end
+			Levels:Visit(Player.Character, Value)
 			Levels:Set(Player, Value)
-			if Player.Character then
-				Levels:Land(Player, Player.Character, 0)
-			end
 			return "Level set to " .. Value .. " - " .. Player.Name
 		end,
 	},

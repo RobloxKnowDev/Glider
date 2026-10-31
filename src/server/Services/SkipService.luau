@@ -29,8 +29,12 @@ function SkipService:Push(Player: Player)
 	Remotemanager:FireClient(self.Name, "Updated", Player, self:Get(Player))
 end
 
-function SkipService:Add(Player: Player, Amount: number)
+function SkipService:Credit(Player: Player, Amount: number)
 	Counts[Player] = self:Get(Player) + Amount
+end
+
+function SkipService:Add(Player: Player, Amount: number)
+	self:Credit(Player, Amount)
 	if Buyers[Player] then
 		Buyers[Player] = nil
 		task.spawn(self.Use, self, Player)

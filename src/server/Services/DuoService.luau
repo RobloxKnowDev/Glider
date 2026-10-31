@@ -83,14 +83,6 @@ function DuoService:Leave(Player: Player)
 	end
 end
 
-function DuoService:Team(Player: Player): { Player }
-	local Group = Groups[Player]
-	if Group then
-		return { Group.Owner, Group.Member }
-	end
-	return { Player }
-end
-
 function DuoService:Launch(Player: Player)
 	local Group = Groups[Player]
 	if not Group or Group.Owner ~= Player then

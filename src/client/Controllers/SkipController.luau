@@ -18,6 +18,13 @@ local Player = Players.LocalPlayer
 local Single = Store.Skip[1]
 local Robux = "\u{E002}"
 local RefusedVolume = 0.6
+local Shown = {
+	Started = true,
+	Revived = true,
+	Launching = false,
+	Crashed = false,
+	Stopped = false,
+}
 
 function SkipController:Paint()
 	if self.count > 0 then
@@ -33,6 +40,13 @@ function SkipController:Init()
 	self.count = 0
 	self.price = Single.Price
 	self:Paint()
+
+	Button.Visible = false
+	for Remote, Visible in pairs(Shown) do
+		Remotemanager:OnClientEvent("GliderService", Remote, function()
+			Button.Visible = Visible
+		end)
+	end
 
 	UiFade.BindButton(Button)
 	Button.Activated:Connect(function()

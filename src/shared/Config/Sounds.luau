@@ -19,9 +19,13 @@ local Sounds: { [string]: { [string]: string } } = {
 		Boost = "rbxassetid://9126229255",
 		Crash = "rbxassetid://9120796401",
 		Thud = "rbxassetid://9113480915",
+		Finish = "rbxassetid://9125446692",
 	},
 	Ring = {
 		Pass = "rbxassetid://9126073001",
+	},
+	Complete = {
+		Fanfare = "rbxassetid://1836473422",
 	},
 	Music = {
 		Main = "rbxassetid://83866396320328",
@@ -35,6 +39,10 @@ local Sounds: { [string]: { [string]: string } } = {
 		Open = "rbxassetid://9120881979",
 		Tick = "rbxassetid://15675032796",
 		Duplicate = "rbxassetid://17208389987",
+	},
+	Wheel = {
+		Tick = "rbxassetid://15675032796",
+		Win = "rbxassetid://9116395089",
 	},
 	Reveal = {
 		Common = "rbxassetid://15675043410",

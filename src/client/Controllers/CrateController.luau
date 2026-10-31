@@ -3,11 +3,11 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local Workspace = game:GetService("Workspace")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local Crates = require(ReplicatedStorage.Shared.Config.Crates)
+local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GlidersConfig = require(ReplicatedStorage.Shared.Config.Gliders)
 local TrailsConfig = require(ReplicatedStorage.Shared.Config.Trails)
 local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
@@ -16,6 +16,7 @@ local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local CrateRoll = require(ReplicatedStorage.Shared.Utils.CrateRoll)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
 local NumberAbbreviator = require(ReplicatedStorage.Shared.Utils.NumberAbbreviator)
+local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
@@ -65,6 +66,7 @@ local DimZIndex = 10
 local CloseMargin = 4
 local White = Color3.new(1, 1, 1)
 local Black = Color3.new(0, 0, 0)
+local Robux = "\u{E002}"
 local LockedStyle: Style = {
 	Background = Color3.fromRGB(110, 110, 110),
 	Stroke = Color3.fromRGB(150, 150, 150),
@@ -184,8 +186,8 @@ function CrateController:Settle()
 end
 
 function CrateController:Show(Prompt: ProximityPrompt)
-	local Box = Prompt.Parent :: BasePart
-	local Name = (Box.Parent :: Instance).Name
+	local Spot = Prompt.Parent :: BasePart
+	local Name: string = Prompt:GetAttribute("Crate")
 	local Crate = Crates[Name]
 	self.crate = Name
 	local Order = {}
@@ -205,7 +207,7 @@ function CrateController:Show(Prompt: ProximityPrompt)
 	for _, Reward in ipairs(Crate.Rewards) do
 		self.total += Reward.Chance
 	end
-	self.origin = Box.Position
+	self.origin = Spot.Position
 	self.reach = Prompt.MaxActivationDistance + CloseMargin
 	self.travel = 1
 	self.focus = 0
@@ -215,6 +217,12 @@ function CrateController:Show(Prompt: ProximityPrompt)
 	self.icon.Image = Images.Crate[Name]
 	Translation.Set(self.title, "{1} Crate", Translation.Format(Crate.Title))
 	Translation.Raw(self.price, NumberAbbreviator(Crate.Price) .. "$")
+	task.spawn(function()
+		local Price = RobuxPrice(self.offers[Name])
+		if self.crate == Name then
+			Translation.Raw(self.robux, Price .. Robux)
+		end
+	end)
 	ProximityPromptService.Enabled = false
 	Core:GetController("UiController"):Open(self.main)
 end
@@ -239,6 +247,12 @@ function CrateController:Buy()
 		return
 	end
 	Remotemanager:FireServer("CrateService", "Open", self.crate)
+end
+
+function CrateController:Purchase()
+	if not self.spin then
+		Remotemanager:FireServer("CrateService", "Purchase", self.crate)
+	end
 end
 
 function CrateController:Refuse()
@@ -326,6 +340,7 @@ function CrateController:Init()
 	local Template = Frame:WaitForChild("Template") :: GuiObject
 	local Buy = Main:WaitForChild("BuyButton") :: GuiButton
 	local Price = Buy:WaitForChild("Text") :: TextLabel
+	local RobuxButton = Main:WaitForChild("RobuxButton") :: GuiButton
 	local Top = Main:WaitForChild("Top")
 	local CloseButton = Top:WaitForChild("CloseButton") :: GuiButton
 	self.main = Main
@@ -335,6 +350,7 @@ function CrateController:Init()
 	self.buyStroke = Buy:WaitForChild("UIStroke") :: UIStroke
 	self.price = Price
 	self.priceStroke = Price:WaitForChild("UIStroke") :: UIStroke
+	self.robux = RobuxButton:WaitForChild("Text") :: TextLabel
 	self.title = Top:WaitForChild("Text") :: TextLabel
 	self.icon = Main:WaitForChild("IconCrate") :: ImageLabel
 	self.style = {
@@ -343,11 +359,14 @@ function CrateController:Init()
 		TextStroke = self.priceStroke.Color,
 	} :: Style
 	self.models = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Glider")
-	self.folder = Workspace:WaitForChild("Crates")
 	self.generator = Random.new()
 	self.cards = {} :: { [number]: Card }
 	self.arrows = {} :: { UIScale }
 	self.refund = 0
+	self.offers = {}
+	for _, Pack in ipairs(Store.Crate) do
+		self.offers[Pack.Name] = Pack
+	end
 	self.entries = {}
 	for Category, Catalog in pairs({ Gliders = GlidersConfig, Trails = TrailsConfig }) do
 		self.entries[Category] = {}
@@ -366,9 +385,13 @@ function CrateController:Init()
 	end
 
 	UiFade.BindButton(Buy)
+	UiFade.BindButton(RobuxButton)
 	UiFade.BindButton(CloseButton)
 	Buy.Activated:Connect(function()
 		self:Buy()
+	end)
+	RobuxButton.Activated:Connect(function()
+		self:Purchase()
 	end)
 	CloseButton.Activated:Connect(function()
 		if not self.spin then
@@ -381,8 +404,7 @@ function CrateController:Init()
 		end
 	end)
 	ProximityPromptService.PromptTriggered:Connect(function(Prompt)
-		local Crate = (Prompt.Parent :: Instance).Parent :: Instance
-		if Crate.Parent == self.folder then
+		if Prompt:GetAttribute("Crate") then
 			UiFade.Click()
 			self:Show(Prompt)
 		end

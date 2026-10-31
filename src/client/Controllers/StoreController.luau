@@ -77,19 +77,17 @@ function StoreController:Init()
 				Remotemanager:FireServer("StoreService", "Buy", Section, Pack.Name)
 			end
 		end)
-		if (Pack.Gamepass or Pack.Product) ~= 0 then
-			task.spawn(function()
-				local Price = RobuxPrice(Pack)
-				if Price and not self.owned[Key] then
-					Translation.Raw(Button:WaitForChild("Text") :: TextLabel, Price .. Robux)
-				end
-			end)
-		end
+		task.spawn(function()
+			local Price = RobuxPrice(Pack)
+			if not self.owned[Key] then
+				Translation.Raw(Button:WaitForChild("Text") :: TextLabel, Price .. Robux)
+			end
+		end)
 	end
 	for _, Pack in ipairs(Store.Cash) do
 		Bind(Scrolling:WaitForChild(Pack.Name):WaitForChild("Frame"):WaitForChild("BuyButton") :: GuiButton, "Cash", Pack)
 	end
-	for _, Section in ipairs({ "Revive", "Skip", "StarterPack" }) do
+	for _, Section in ipairs({ "Revive", "Skip", "Spin", "StarterPack" }) do
 		local Holder = Scrolling:WaitForChild(Section):WaitForChild("Frame")
 		for _, Pack in ipairs(Store[Section]) do
 			Bind(Holder:WaitForChild(Pack.Name) :: GuiButton, Section, Pack)

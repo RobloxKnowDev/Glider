@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local NumberAbbreviator = require(ReplicatedStorage.Shared.Utils.NumberAbbreviator)
@@ -46,10 +47,13 @@ end
 function StudsController:Gain(Amount: number)
 	self.pending += Amount
 	self:Show()
-	GainBurst.Play(self.text, Amount, GainStyle, function()
-		return GainBurst.Label("$", GainStyle)
-	end, function(Share)
-		self:Land(Share)
+	task.spawn(function()
+		Core:GetController("TransitionController"):Wait()
+		GainBurst.Play(self.text, Amount, GainStyle, function()
+			return GainBurst.Label("$", GainStyle)
+		end, function(Share)
+			self:Land(Share)
+		end)
 	end)
 end
 

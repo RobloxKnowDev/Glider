@@ -102,11 +102,19 @@ function CounterController:Init()
 	local TopRight = Player:WaitForChild("PlayerGui"):WaitForChild("HUD"):WaitForChild("TopRight")
 	self.revives = self:Counter(TopRight:WaitForChild("Revive"), Images.Counter.Revive)
 	self.skips = self:Counter(TopRight:WaitForChild("Skip"), Images.Counter.Skip)
+	local Wheel = TopRight:WaitForChild("Wheel") :: GuiObject
+	self.spins = self:Counter(Wheel, Images.Counter.Wheel)
+	local function Show()
+		Wheel.Visible = not Player:GetAttribute("Flying")
+	end
+	Player:GetAttributeChangedSignal("Flying"):Connect(Show)
+	Show()
 end
 
 function CounterController:Start()
 	self:Track(self.revives, "ReviveService", "GetRevives")
 	self:Track(self.skips, "SkipService", "GetSkips")
+	self:Track(self.spins, "SpinService", "GetSpins")
 end
 
 return CounterController

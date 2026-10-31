@@ -141,16 +141,18 @@ local function Popup(Amount: number, Style: Style, Symbol: () -> GuiObject, Heig
 	Rise(Holder, PopupEnd, PopupHold)
 end
 
-function GainBurst.Notice(Image: string, Style: Style, Pattern: string, ...: any)
+function GainBurst.Notice(Image: string?, Style: Style, Pattern: string, ...: any)
 	Setup()
 	local Holder = Row("Notice", NoticeHeight, NoticeStart, NoticeGap)
-	local Icon = Instance.new("ImageLabel")
-	Icon.LayoutOrder = 1
-	Icon.Size = UDim2.fromOffset(NoticeHeight, NoticeHeight)
-	Icon.BackgroundTransparency = 1
-	Icon.ScaleType = Enum.ScaleType.Fit
-	Icon.Image = Image
-	Icon.Parent = Holder
+	if Image then
+		local Icon = Instance.new("ImageLabel")
+		Icon.LayoutOrder = 1
+		Icon.Size = UDim2.fromOffset(NoticeHeight, NoticeHeight)
+		Icon.BackgroundTransparency = 1
+		Icon.ScaleType = Enum.ScaleType.Fit
+		Icon.Image = Image
+		Icon.Parent = Holder
+	end
 
 	local Text = Line(Style, NoticeHeight, NoticeHeight * NoticeTextScale, 2)
 	Translation.Set(Text, Pattern, ...)

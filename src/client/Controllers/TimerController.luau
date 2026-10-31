@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
+local Format = require(ReplicatedStorage.Shared.Utils.Chrono)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
 
@@ -19,6 +20,7 @@ type Run = {
 	Markers: { ImageLabel },
 	Segments: { Frame },
 	Update: () -> (),
+	Rewind: () -> (),
 	Loop: RBXScriptConnection,
 }
 
@@ -47,11 +49,6 @@ local TrackTransparency = 0.45
 local FillColor = Color3.fromRGB(80, 200, 255)
 local CrashColor = Color3.fromRGB(255, 80, 80)
 local BestColor = Color3.fromRGB(255, 220, 40)
-
-local function Format(Time: number): string
-	local Hundredths = math.floor(Time * 100)
-	return string.format("%02d:%02d.%02d", Hundredths // 6000, Hundredths // 100 % 60, Hundredths % 100)
-end
 
 local function Round(Object: GuiObject)
 	local Corner = Instance.new("UICorner")
@@ -163,12 +160,16 @@ function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: 
 		Markers = Markers,
 		Segments = Segments,
 		Update = Update,
+		Rewind = function()
+			Best = 0
+		end,
 		Loop = RunService.RenderStepped:Connect(Update),
 	}
 
 	self.timer.TextColor3 = TextColor
 	Update()
 	self.gui.Enabled = true
+	self.lobby.Visible = false
 	self.run = Run
 end
 
@@ -184,7 +185,11 @@ end
 
 function TimerController:Resume()
 	local Run = self.run
-	if not Run or not Run.Frozen then
+	if not Run then
+		return
+	end
+	Run.Rewind()
+	if not Run.Frozen then
 		return
 	end
 	Run.Began += os.clock() - Run.Frozen
@@ -208,7 +213,9 @@ function TimerController:Reset()
 end
 
 function TimerController:Record(Time: number?)
-	Translation.Set(self.best, "Best: {1}", if Time then Format(Time) else "--:--.--")
+	local Text = if Time then Format(Time) else "--:--.--"
+	Translation.Set(self.best, "Best: {1}", Text)
+	Translation.Set(self.lobby, "Best: {1}", Text)
 end
 
 function TimerController:Finish()
@@ -226,6 +233,7 @@ function TimerController:Finish()
 		Segment:Destroy()
 	end
 	self.gui.Enabled = false
+	self.lobby.Visible = true
 end
 
 function TimerController:Init()
@@ -317,6 +325,7 @@ function TimerController:Init()
 	self.timer = Timer
 	self.track = Track
 	self.best = Best
+	self.lobby = Hud:WaitForChild("BestText") :: TextLabel
 	self.elapsed = 0
 	self:Record(nil)
 

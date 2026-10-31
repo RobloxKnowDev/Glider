@@ -26,6 +26,7 @@ type Pack = {
 	Revives: number?,
 	Skips: number?,
 	Spins: number?,
+	Crate: string?,
 }
 
 local Packs: { [string]: { [string]: Pack } } = {}
@@ -60,6 +61,9 @@ local function Grant(Player: Player, Pack: Pack)
 	end
 	if Pack.Spins then
 		Core:GetService("SpinService"):Add(Player, Pack.Spins)
+	end
+	if Pack.Crate then
+		Core:GetService("CrateService"):Roll(Player, Pack.Crate)
 	end
 end
 

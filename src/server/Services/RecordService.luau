@@ -51,19 +51,21 @@ function RecordService:Taint(Player: Player)
 	self:Run(Player).Clean = false
 end
 
-function RecordService:Finish(Player: Player)
+function RecordService:Finish(Player: Player): (number, boolean)
 	self:Pause(Player)
 	local Levels = Core:GetService("LevelService")
-	if Levels:Get(Player) <= Levels:Count() or not Runs[Player].Clean then
-		return
+	local Run = self:Run(Player)
+	local Time = Run.Elapsed
+	if Levels:Get(Player) <= Levels:Count() or not Run.Clean then
+		return Time, false
 	end
-	local Time = Runs[Player].Elapsed
 	local Record = Records[Player]
 	if Record and Record <= Time then
-		return
+		return Time, false
 	end
 	Records[Player] = Time
 	Remotemanager:FireClient(self.Name, "Updated", Player, Time)
+	return Time, true
 end
 
 function RecordService:Init()

@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Images = require(ReplicatedStorage.Shared.Config.Images)
 local TrailsConfig = require(ReplicatedStorage.Shared.Config.Trails)
 
 local TrailService = {
@@ -33,11 +34,31 @@ local SparkleSize = NumberSequence.new({
 })
 local SparkleTransparency = NumberSequence.new(0, 0.4)
 
+local ParticleRate = 6
+local ParticleLifetime = NumberRange.new(0.8, 1.2)
+local ParticleSpeed = NumberRange.new(0.5, 1.5)
+local ParticleTilt = NumberRange.new(-20, 20)
+local ParticleSpin = NumberRange.new(-45, 45)
+local ParticleDrag = 2
+local ParticleGlow = 0.8
+local ParticleSize = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0),
+	NumberSequenceKeypoint.new(0.15, 1.5),
+	NumberSequenceKeypoint.new(1, 0.5),
+})
+local ParticleTransparency = NumberSequence.new({
+	NumberSequenceKeypoint.new(0, 0.4),
+	NumberSequenceKeypoint.new(0.6, 0.4),
+	NumberSequenceKeypoint.new(1, 1),
+})
+
 local Colors: { [string]: ColorSequence } = {}
 local Sparkles: { [string]: ColorSequence } = {}
+local Particles: { [string]: string } = {}
 for _, Entry in ipairs(TrailsConfig.List) do
 	Colors[Entry.Name] = Entry.Color
 	Sparkles[Entry.Name] = Entry.Sparkles
+	Particles[Entry.Name] = Entry.Particle
 end
 
 function TrailService:Attach(Bar: BasePart, Frame: CFrame, Name: string)
@@ -75,6 +96,24 @@ function TrailService:Attach(Bar: BasePart, Frame: CFrame, Name: string)
 				Emitter.RotSpeed = SparkleSpin
 				Emitter.Drag = SparkleDrag
 				Emitter.LightEmission = 1
+				Emitter.LightInfluence = 0
+				Emitter.Parent = Wing
+			end
+
+			local Particle = Particles[Name]
+			if Particle then
+				local Emitter = Instance.new("ParticleEmitter")
+				Emitter.Texture = Images.Particle[Particle]
+				Emitter.Size = ParticleSize
+				Emitter.Transparency = ParticleTransparency
+				Emitter.Lifetime = ParticleLifetime
+				Emitter.Rate = ParticleRate
+				Emitter.Speed = ParticleSpeed
+				Emitter.SpreadAngle = Vector2.new(180, 180)
+				Emitter.Rotation = ParticleTilt
+				Emitter.RotSpeed = ParticleSpin
+				Emitter.Drag = ParticleDrag
+				Emitter.LightEmission = ParticleGlow
 				Emitter.LightInfluence = 0
 				Emitter.Parent = Wing
 			end

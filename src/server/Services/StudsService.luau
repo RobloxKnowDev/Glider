@@ -13,7 +13,7 @@ local StudsService = {
 	},
 }
 
-local Startingstuds = 1000
+local Startingstuds = 0
 local Values: { [Player]: IntValue } = {}
 
 function StudsService:EnsurePlayer(Player: Player): IntValue
@@ -22,7 +22,7 @@ function StudsService:EnsurePlayer(Player: Player): IntValue
 		local Leaderstats = Instance.new("Folder")
 		Leaderstats.Name = "leaderstats"
 		Value = Instance.new("IntValue")
-		Value.Name = "Studs"
+		Value.Name = "Cash"
 		Value.Value = Startingstuds
 		Value.Parent = Leaderstats
 		Leaderstats.Parent = Player

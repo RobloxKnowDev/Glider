@@ -13,12 +13,29 @@ local RiseMax = 50
 local RiseChance = 0.35
 local RiseStyle = Enum.EasingStyle.Quad
 local FallStyle = Enum.EasingStyle.Sine
-local FlySpeed = 20
+local FlySpeed = 28
 local FlapSpeed = 12
 local FlapAngle = math.rad(35)
-local LoopPoints = 6
-local LoopSamples = 12
 local ZoneMargin = 6
+local PopTime = 0.4
+local PopStyle = Enum.EasingStyle.Back
+local WhirlSpeed = math.rad(180)
+local WanderSpeed = 15
+local WanderRatio = 0.7
+local IceGrowTime = 0.5
+local IceGrowStyle = Enum.EasingStyle.Back
+local IceHangTime = 1.5
+local IceShakeTime = 0.8
+local IceShakeAngle = math.rad(5)
+local IceShakeSpeed = 40
+local IceShakeRatio = 1.6
+local IceGravity = 150
+local IceBreakTime = 0.25
+local IceBreakStyle = Enum.EasingStyle.Quad
+local IceGoneTime = 1
+local TurnSpeed = math.rad(45)
+local BobHeight = 0.3
+local BobSpeed = 2
 
 export type Piece = {
 	Part: BasePart,
@@ -29,7 +46,11 @@ export type Piece = {
 	Count: number?,
 	Zone: CFrame?,
 	Extent: Vector3?,
+	Drop: number?,
+	Length: number?,
 	Local: CFrame,
+	Size: Vector3,
+	Scale: number,
 }
 
 type Plan = {
@@ -38,19 +59,16 @@ type Plan = {
 	Delay: number,
 }
 
-type Loop = {
-	Points: { Vector3 },
-	Marks: { number },
-	Length: number,
+type Lane = {
 	Offset: number,
-	Time: number,
-	Root: CFrame,
+	Pass: number,
+	Spot: Vector3,
 }
 
 local Scenery = {}
 
 local Plans: { [number]: Plan } = {}
-local Loops: { [number]: Loop } = {}
+local Lanes: { [number]: Lane } = {}
 
 function Scenery.Read(Part: BasePart): Piece
 	local Hinge: CFrame = Part:GetAttribute("Hinge")
@@ -63,7 +81,11 @@ function Scenery.Read(Part: BasePart): Piece
 		Count = Part:GetAttribute("Count"),
 		Zone = Part:GetAttribute("Zone"),
 		Extent = Part:GetAttribute("Extent"),
-		Local = Hinge:ToObjectSpace(Part:GetAttribute("Rest")),
+		Drop = Part:GetAttribute("Drop"),
+		Length = Part:GetAttribute("Length"),
+		Local =Hinge:ToObjectSpace(Part:GetAttribute("Rest")),
+		Size = Part.Size,
+		Scale = 1,
 	}
 end
 
@@ -117,85 +139,120 @@ local function Rise(Time: number, Index: number, Count: number): number
 	return 0
 end
 
-local function Spline(Points: { Vector3 }, Segment: number, Progress: number): (Vector3, Vector3)
-	local Count = #Points
-	local A = Points[(Segment - 2) % Count + 1]
-	local B = Points[Segment]
-	local C = Points[Segment % Count + 1]
-	local D = Points[(Segment + 1) % Count + 1]
-	local Linear = C - A
-	local Square = 2 * A - 5 * B + 4 * C - D
-	local Cube = 3 * B - A - 3 * C + D
-	local Position = 0.5 * (2 * B + Linear * Progress + Square * Progress ^ 2 + Cube * Progress ^ 3)
-	local Tangent = 0.5 * (Linear + 2 * Square * Progress + 3 * Cube * Progress ^ 2)
-	return Position, Tangent
+local function Track(Piece: Piece, Time: number): (Lane, number)
+	local Extent = Piece.Extent :: Vector3
+	local Lane = Lanes[Piece.Phase]
+	if not Lane then
+		Lane = { Offset = Random.new(Piece.Phase):NextNumber(), Pass = -1, Spot = Vector3.zero }
+		Lanes[Piece.Phase] = Lane
+	end
+	local Travel = Time * FlySpeed / Extent.Z + Lane.Offset
+	local Pass = Travel // 1
+	if Lane.Pass ~= Pass then
+		local Reach = (Extent / 2 - Vector3.one * ZoneMargin):Max(Vector3.zero)
+		local Roll = Random.new(Pass * (Piece.Count :: number) + Piece.Phase)
+		Lane.Pass = Pass
+		Lane.Spot = Vector3.new(Roll:NextNumber(-Reach.X, Reach.X), Roll:NextNumber(-Reach.Y, Reach.Y), 0)
+	end
+	return Lane, Travel % 1
 end
 
-local function Plot(Piece: Piece): Loop
-	local Zone = Piece.Zone :: CFrame
-	local Reach = ((Piece.Extent :: Vector3) / 2 - Vector3.one * ZoneMargin):Max(Vector3.zero)
-	local Roll = Random.new(Piece.Phase)
-	local Points: { Vector3 } = {}
-	for _ = 1, LoopPoints do
-		local Spot = Vector3.new(
-			Roll:NextNumber(-Reach.X, Reach.X),
-			Roll:NextNumber(-Reach.Y, Reach.Y),
-			Roll:NextNumber(-Reach.Z, Reach.Z)
+local function Grow(Piece: Piece, Progress: number): number
+	local Edge = math.min(Progress, 1 - Progress) * (Piece.Extent :: Vector3).Z / FlySpeed
+	return TweenService:GetValue(math.min(Edge / PopTime, 1), PopStyle, Enum.EasingDirection.Out)
+end
+
+local function Shrink(Local: CFrame, Center: Vector3, Scale: number): CFrame
+	return Local.Rotation + Center + (Local.Position - Center) * Scale
+end
+
+local function Flight(Piece: Piece, Time: number, Body: CFrame, Altitude: number?): CFrame
+	local Lane, Progress = Track(Piece, Time)
+	local Extent = Piece.Extent :: Vector3
+	local Center = (Piece.Zone :: CFrame) * CFrame.new(Lane.Spot + Vector3.zAxis * Extent.Z * (0.5 - Progress))
+	if Altitude then
+		Center += Vector3.yAxis * (Altitude - Center.Y)
+	end
+	return Center * Shrink(Body, Vector3.zero, Grow(Piece, Progress))
+end
+
+local function Plunge(Piece: Piece): (number, number)
+	local Fall = math.sqrt(2 * (Piece.Drop :: number) / IceGravity)
+	return Fall, IceGrowTime + IceHangTime + IceShakeTime + Fall + IceBreakTime + IceGoneTime
+end
+
+local function Beat(Piece: Piece, Time: number, Cycle: number): number
+	return Time / Cycle + (Piece.Phase - 1) / (Piece.Count :: number)
+end
+
+local function Icicle(Piece: Piece, Time: number): (CFrame, Vector3, number)
+	local Fall, Cycle = Plunge(Piece)
+	local Clock = Beat(Piece, Time, Cycle) % 1 * Cycle
+	if Clock < IceGrowTime then
+		return CFrame.identity, Vector3.zero, TweenService:GetValue(Clock / IceGrowTime, IceGrowStyle, Enum.EasingDirection.Out)
+	end
+	Clock -= IceGrowTime + IceHangTime
+	if Clock < 0 then
+		return CFrame.identity, Vector3.zero, 1
+	elseif Clock < IceShakeTime then
+		local Angle = IceShakeAngle * Clock / IceShakeTime
+		local Tilt = CFrame.Angles(
+			Angle * math.sin(Clock * IceShakeSpeed),
+			0,
+			Angle * math.sin(Clock * IceShakeSpeed * IceShakeRatio)
 		)
-		table.insert(Points, Zone:PointToWorldSpace(Spot))
+		return Tilt, Vector3.zero, 1
 	end
-	local Marks = { 0 }
-	local Last = Points[1]
-	for Segment = 1, LoopPoints do
-		for Step = 1, LoopSamples do
-			local Point = Spline(Points, Segment, Step / LoopSamples)
-			table.insert(Marks, Marks[#Marks] + (Point - Last).Magnitude)
-			Last = Point
-		end
+	Clock -= IceShakeTime
+	if Clock < Fall then
+		return CFrame.new(0, -IceGravity * Clock * Clock / 2, 0), Vector3.zero, 1
 	end
-	local Length = Marks[#Marks]
-	local Loop: Loop = {
-		Points = Points,
-		Marks = Marks,
-		Length = Length,
-		Offset = Roll:NextNumber(0, Length),
-		Time = -1,
-		Root = CFrame.identity,
-	}
-	Loops[Piece.Phase] = Loop
-	return Loop
+	Clock -= Fall
+	local Break = TweenService:GetValue(math.min(Clock / IceBreakTime, 1), IceBreakStyle, Enum.EasingDirection.Out)
+	return CFrame.new(0, -(Piece.Drop :: number), 0), Vector3.new(0, -(Piece.Length :: number), 0), 1 - Break
 end
 
-local function Flight(Piece: Piece, Time: number): CFrame
-	local Loop = Loops[Piece.Phase] or Plot(Piece)
-	if Loop.Time ~= Time then
-		local Distance = (Time * FlySpeed + Loop.Offset) % Loop.Length
-		local Marks = Loop.Marks
-		local Low, High = 1, #Marks
-		while High - Low > 1 do
-			local Middle = (Low + High) // 2
-			if Marks[Middle] <= Distance then
-				Low = Middle
-			else
-				High = Middle
-			end
-		end
-		local Step = Low - 1 + (Distance - Marks[Low]) / (Marks[High] - Marks[Low])
-		local Position, Tangent = Spline(Loop.Points, Step // LoopSamples + 1, Step % LoopSamples / LoopSamples)
-		Loop.Time = Time
-		Loop.Root = CFrame.lookAt(Position, Position + Tangent)
-	end
-	return Loop.Root
+function Scenery.Strikes(Piece: Piece, Time: number): number
+	local Fall, Cycle = Plunge(Piece)
+	return (Beat(Piece, Time, Cycle) - (IceGrowTime + IceHangTime + IceShakeTime + Fall) / Cycle) // 1
 end
 
-function Scenery.Pose(Piece: Piece, Time: number): CFrame
+function Scenery.Scale(Piece: Piece, Time: number): number
+	if Piece.Motion == "Fall" then
+		local _, _, Scale = Icicle(Piece, Time)
+		return Scale
+	elseif Piece.Motion ~= "Fly" and Piece.Motion ~= "Flap" then
+		return 1
+	end
+	local _, Progress = Track(Piece, Time)
+	return Grow(Piece, Progress)
+end
+
+local function Wander(Piece: Piece, Time: number): Vector3
+	local Reach = Piece.Extent :: Vector3
+	local X = Reach.X * math.sin(Time * WanderSpeed / math.max(Reach.X, 1) + Piece.Phase)
+	local Z = Reach.Z * math.sin(Time * WanderSpeed * WanderRatio / math.max(Reach.Z, 1) + Piece.Phase * 2)
+	return Vector3.new(X, 0, Z)
+end
+
+function Scenery.Pose(Piece: Piece, Time: number, Altitude: number?): CFrame
 	if Piece.Motion == "Fly" then
-		return Flight(Piece, Time) * Piece.Hinge * Piece.Local
+		return Flight(Piece, Time, Piece.Hinge * Piece.Local, Altitude)
 	elseif Piece.Motion == "Flap" then
 		local Angle = FlapAngle * math.sin(Time * FlapSpeed + Piece.Phase)
-		return Flight(Piece, Time) * Piece.Hinge * CFrame.fromAxisAngle(Piece.Axis, Angle) * Piece.Local
+		return Flight(Piece, Time, Piece.Hinge * CFrame.fromAxisAngle(Piece.Axis, Angle) * Piece.Local, Altitude)
 	elseif Piece.Motion == "Rise" then
 		return Piece.Hinge * Piece.Local + Piece.Axis * Rise(Time, Piece.Phase, Piece.Count :: number)
+	elseif Piece.Motion == "Whirl" then
+		local Angle = (Time * WhirlSpeed) % (2 * math.pi)
+		return Piece.Hinge * CFrame.new(Wander(Piece, Time)) * CFrame.fromAxisAngle(Piece.Axis, Angle) * Piece.Local
+	elseif Piece.Motion == "Fall" then
+		local Frame, Center, Scale = Icicle(Piece, Time)
+		return Piece.Hinge * Frame * Shrink(Piece.Local, Center, Scale)
+	elseif Piece.Motion == "Turn" then
+		local Angle = (Time * TurnSpeed) % (2 * math.pi)
+		local Height = BobHeight * math.sin(Time * BobSpeed + 2 * math.pi * (Piece.Phase - 1) / (Piece.Count :: number))
+		return Piece.Hinge * CFrame.new(0, Height, 0) * CFrame.fromAxisAngle(Piece.Axis, Angle) * Piece.Local
 	end
 	local Angle = if Piece.Motion == "Swing"
 		then Swing(Time, Piece.Phase)

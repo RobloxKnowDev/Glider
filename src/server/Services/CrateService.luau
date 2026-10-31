@@ -13,6 +13,7 @@ local CrateService = {
 	Priority = 15,
 	Remotes = {
 		Open = "Event",
+		Purchase = "Event",
 		Opened = "Event",
 		Refused = "Event",
 	},
@@ -25,7 +26,11 @@ local OpenMargin = 10
 local EventCheck = 30
 local Generator = Random.new()
 local Opening: { [Player]: boolean } = {}
-local Boxes: { [string]: BasePart } = {}
+local Npcs = {
+	GliderNpc = "BasicGlider",
+	TrailNpc = "BasicTrail",
+}
+local Spots: { [string]: { BasePart } } = {}
 
 local function Live(Name: string): boolean
 	local Event = Crates[Name].Event
@@ -36,25 +41,29 @@ local function Live(Name: string): boolean
 	return Now >= Events[Event].Start and Now < Events[Event].Finish
 end
 
-function CrateService:Open(Player: Player, Name: any)
-	if typeof(Name) ~= "string" or not Boxes[Name] or Opening[Player] or not Live(Name) or not Core:GetService("DataService"):IsLoaded(Player) then
-		return
+function CrateService:Ready(Player: Player, Name: any): boolean
+	if typeof(Name) ~= "string" or not Spots[Name] or Opening[Player] or not Live(Name) or not Core:GetService("DataService"):IsLoaded(Player) then
+		return false
 	end
 	local Character = Player.Character
-	if not Character or (Character:GetPivot().Position - Boxes[Name].Position).Magnitude > PromptDistance + OpenMargin then
-		return
+	if not Character then
+		return false
 	end
+	for _, Spot in ipairs(Spots[Name]) do
+		if (Character:GetPivot().Position - Spot.Position).Magnitude <= PromptDistance + OpenMargin then
+			return true
+		end
+	end
+	return false
+end
+
+function CrateService:Roll(Player: Player, Name: string)
 	local Crate = Crates[Name]
-	local Studs = Core:GetService("StudsService")
-	if not Studs:Spend(Player, Crate.Price) then
-		Remotemanager:FireClient(self.Name, "Refused", Player)
-		return
-	end
 	local Reward = CrateRoll(Crate.Rewards, Generator)
 	local Refund = if Core:GetService("InventoryService"):Give(Player, Reward.Category, Reward.Name)
 		then 0
 		else math.floor(Crate.Price * DuplicateRefund)
-	Studs:Credit(Player, Refund)
+	Core:GetService("StudsService"):Credit(Player, Refund)
 	Opening[Player] = true
 	Remotemanager:FireClient(self.Name, "Opened", Player, Name, Reward.Category, Reward.Name, Refund, SpinTime)
 	task.delay(SpinTime, function()
@@ -62,10 +71,42 @@ function CrateService:Open(Player: Player, Name: any)
 	end)
 end
 
+function CrateService:Open(Player: Player, Name: any)
+	if not self:Ready(Player, Name) then
+		return
+	end
+	if not Core:GetService("StudsService"):Spend(Player, Crates[Name].Price) then
+		Remotemanager:FireClient(self.Name, "Refused", Player)
+		return
+	end
+	self:Roll(Player, Name)
+end
+
+function CrateService:Purchase(Player: Player, Name: any)
+	if self:Ready(Player, Name) then
+		Core:GetService("StoreService"):Buy(Player, "Crate", Name)
+	end
+end
+
 function CrateService:Init()
 	Remotemanager:OnServerEvent(self.Name, "Open", function(Player, Name)
 		self:Open(Player, Name)
 	end)
+	Remotemanager:OnServerEvent(self.Name, "Purchase", function(Player, Name)
+		self:Purchase(Player, Name)
+	end)
+end
+
+function CrateService:Prompt(Part: BasePart, Name: string)
+	table.insert(Spots[Name], Part)
+	local Prompt = Instance.new("ProximityPrompt")
+	Prompt.ActionText = "Open"
+	Prompt.ObjectText = Crates[Name].Title .. " Crate"
+	Prompt.HoldDuration = 0
+	Prompt.MaxActivationDistance = PromptDistance
+	Prompt.RequiresLineOfSight = false
+	Prompt:SetAttribute("Crate", Name)
+	Prompt.Parent = Part
 end
 
 function CrateService:Start()
@@ -77,15 +118,16 @@ function CrateService:Start()
 		if Crates[Name].Event then
 			Seasonal[Crate] = Name
 		end
-		local Box = Crate:WaitForChild("Box") :: BasePart
-		Boxes[Name] = Box
-		local Prompt = Instance.new("ProximityPrompt")
-		Prompt.ActionText = "Open"
-		Prompt.ObjectText = Crates[Name].Title .. " Crate"
-		Prompt.HoldDuration = 0
-		Prompt.MaxActivationDistance = PromptDistance
-		Prompt.RequiresLineOfSight = false
-		Prompt.Parent = Box
+		Spots[Name] = {}
+		self:Prompt(Crate:WaitForChild("Box") :: BasePart, Name)
+	end
+	for _, Stand in ipairs(Workspace:WaitForChild("Lobby"):WaitForChild("Stands"):GetChildren()) do
+		local Skins = Stand:FindFirstChild("Skins")
+		if Skins then
+			for Npc, Name in pairs(Npcs) do
+				self:Prompt(Skins:WaitForChild(Npc):WaitForChild("HumanoidRootPart") :: BasePart, Name)
+			end
+		end
 	end
 	task.spawn(function()
 		while true do

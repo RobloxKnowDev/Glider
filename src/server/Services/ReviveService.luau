@@ -22,8 +22,12 @@ function ReviveService:Push(Player: Player)
 	Remotemanager:FireClient(self.Name, "Updated", Player, self:Get(Player))
 end
 
-function ReviveService:Add(Player: Player, Amount: number)
+function ReviveService:Credit(Player: Player, Amount: number)
 	Counts[Player] = self:Get(Player) + Amount
+end
+
+function ReviveService:Add(Player: Player, Amount: number)
+	self:Credit(Player, Amount)
 	self:Push(Player)
 	Core:GetService("GliderService"):Refilled(Player)
 end

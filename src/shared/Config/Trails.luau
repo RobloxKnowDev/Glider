@@ -16,6 +16,14 @@ return {
 			Color = ColorSequence.new(Color3.fromRGB(255, 255, 255)),
 		},
 		{
+			Name = "Heart",
+			Rarity = "Epic",
+			Color = ColorSequence.new(Color3.fromRGB(255, 140, 200), Color3.fromRGB(255, 40, 90)),
+			Particle = "Heart",
+			Gamepass = 0,
+			Price = 99,
+		},
+		{
 			Name = "Sky",
 			Rarity = "Rare",
 			Color = ColorSequence.new(Color3.fromRGB(130, 200, 255)),
@@ -37,6 +45,18 @@ return {
 			Rarity = "Mythic",
 			Color = Rainbow,
 			Sparkles = Rainbow,
+		},
+		{
+			Name = "Witch",
+			Rarity = "Epic",
+			Color = ColorSequence.new(Color3.fromRGB(150, 60, 220), Color3.fromRGB(110, 255, 90)),
+			Sparkles = ColorSequence.new(Color3.fromRGB(190, 120, 255), Color3.fromRGB(150, 255, 120)),
+		},
+		{
+			Name = "Pumpkin",
+			Rarity = "Legendary",
+			Color = ColorSequence.new(Color3.fromRGB(255, 140, 30), Color3.fromRGB(110, 40, 140)),
+			Particle = "Pumpkin",
 		},
 	},
 }

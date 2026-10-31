@@ -103,6 +103,12 @@ function TransitionController:Reveal(Character: Model)
 	self:Open(Character, self.token)
 end
 
+function TransitionController:Wait()
+	while self.gui.Enabled do
+		self.gui:GetPropertyChangedSignal("Enabled"):Wait()
+	end
+end
+
 function TransitionController:Watch(Character: Model)
 	local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
 	Humanoid.Died:Connect(function()

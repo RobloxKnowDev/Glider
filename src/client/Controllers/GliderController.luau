@@ -18,7 +18,7 @@ local GliderController = {
 local Player = Players.LocalPlayer
 
 local ForwardSpeed = 30
-local LevelSpeed = 3
+local LevelSpeed = 5
 local SinkSpeed = 6
 local WindLiftSpeed = 25
 local LiftResponse = 6
@@ -61,6 +61,7 @@ local GustVolume = 0.6
 local BoostVolume = 0.6
 local CrashVolume = 0.8
 local ThudVolume = 0.7
+local FinishVolume = 1.3
 
 local function Approach(Current: number, Target: number, Response: number, Dt: number): number
 	return Current + (Target - Current) * (1 - math.exp(-Response * Dt))
@@ -77,6 +78,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Character = Player.Character
 	local Humanoid = Character:WaitForChild("Humanoid") :: Humanoid
 	local Head = Character:WaitForChild("Head") :: BasePart
+	local Root = Character:WaitForChild("HumanoidRootPart") :: BasePart
 	local Folder = Workspace:WaitForChild("Gliders")
 	local Rings = Workspace:WaitForChild("RingsFolder")
 	local Windzones = Workspace:WaitForChild("Windzones")
@@ -179,6 +181,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		if self.launching then
 			return
 		end
+		SceneryController:Aim(Root.Position.Y)
 
 		local View = Camera.CFrame.LookVector
 		local Offset = math.clamp(
@@ -356,6 +359,7 @@ function GliderController:Finish()
 		Connection:Disconnect()
 	end
 	Flight.Wind:Destroy()
+	Core:GetController("SceneryController"):Aim(nil)
 	Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
 	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
@@ -407,6 +411,9 @@ function GliderController:Init()
 		if self.flight then
 			self.flight.Ring()
 		end
+	end)
+	Remotemanager:OnClientEvent("GliderService", "Finished", function()
+		Sfx.Play(Sounds.Flight.Finish, FinishVolume)
 	end)
 	Remotemanager:OnClientEvent("GliderService", "Stopped", function()
 		self:Finish()

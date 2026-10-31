@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
@@ -178,12 +180,30 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	return Card
 end
 
+function InventoryController:Label(Prompt: ProximityPrompt, Name: string)
+	if self.state.Gliders.Owned[Name] then
+		Prompt.ActionText = "Owned"
+	end
+end
+
+function InventoryController:Offer(Name: string)
+	UiFade.Click()
+	if self.state.Gliders.Owned[Name] then
+		Sfx.Play(Sounds.Ui.Negative, LockedVolume)
+	else
+		Remotemanager:FireServer("InventoryService", "Buy", "Gliders", Name)
+	end
+end
+
 function InventoryController:Apply(State)
 	self.state = State
+	for Prompt, Name in pairs(self.prompts) do
+		self:Label(Prompt, Name)
+	end
 	for _, Card in ipairs(self.cards) do
 		local Inventory = State[Card.Category]
 		local Owned = Inventory.Owned[Card.Name] == true
-		Card.Lock.Visible = not Owned
+		Card.Lock.Visible = not Owned and not Card.Gamepass
 		if not Owned and Card.Gamepass then
 			Paint(Card, BuyStyle, Card.Price .. Robux)
 		elseif not Owned then
@@ -205,7 +225,21 @@ function InventoryController:Page(Category: string, Catalog: Catalog, Gui: Insta
 	Template.Parent = nil
 	Frame.Visible = false
 
+	local Order: { [Entry]: number } = {}
 	for Index, Entry in ipairs(Catalog.List) do
+		Order[Entry] = Index
+	end
+	local function Group(Entry: Entry): number
+		return if Entry.Name == Catalog.Default then 0 elseif Entry.Gamepass then 1 else 1 + Rarities[Entry.Rarity].Rank
+	end
+	local Sorted = table.clone(Catalog.List)
+	table.sort(Sorted, function(A, B)
+		if Group(A) ~= Group(B) then
+			return Group(A) < Group(B)
+		end
+		return Order[A] < Order[B]
+	end)
+	for Index, Entry in ipairs(Sorted) do
 		table.insert(self.cards, self:Build(Category, Scrolling, Template, Entry, Index))
 	end
 
@@ -228,6 +262,8 @@ function InventoryController:Init()
 	self.models = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Glider")
 	self.cards = {}
 	self.spinners = {}
+	self.prompts = {} :: { [ProximityPrompt]: string }
+	local Display = Workspace:WaitForChild("RotatingGliders")
 
 	self:Page("Gliders", GlidersConfig, PlayerGui:WaitForChild("GliderUi"), Left:WaitForChild("GliderButton") :: GuiButton)
 	self:Page("Trails", TrailsConfig, PlayerGui:WaitForChild("TrailUi"), Left:WaitForChild("TrailButton") :: GuiButton)
@@ -235,6 +271,23 @@ function InventoryController:Init()
 		Gliders = { Owned = { [GlidersConfig.Default] = true }, Equipped = GlidersConfig.Default },
 		Trails = { Owned = { [TrailsConfig.Default] = true }, Equipped = TrailsConfig.Default },
 	})
+
+	ProximityPromptService.PromptShown:Connect(function(Prompt)
+		local Model = (Prompt.Parent :: Instance).Parent :: Instance
+		if Model.Parent == Display then
+			self.prompts[Prompt] = Model.Name
+			self:Label(Prompt, Model.Name)
+		end
+	end)
+	ProximityPromptService.PromptHidden:Connect(function(Prompt)
+		self.prompts[Prompt] = nil
+	end)
+	ProximityPromptService.PromptTriggered:Connect(function(Prompt)
+		local Name = self.prompts[Prompt]
+		if Name then
+			self:Offer(Name)
+		end
+	end)
 
 	RunService.RenderStepped:Connect(function(Dt)
 		for _, Spinner in ipairs(self.spinners) do
