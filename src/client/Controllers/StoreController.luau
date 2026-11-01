@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
@@ -32,6 +33,12 @@ local OwnedStyle = {
 	Stroke = Color3.fromRGB(150, 150, 150),
 	TextStroke = Color3.fromRGB(60, 60, 60),
 }
+local SpinInfo = TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1)
+local JumpDelay = 3
+local JumpHeight = 0.2
+local JumpTilt = 10
+local RiseInfo = TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local FallInfo = TweenInfo.new(0.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out)
 
 function StoreController:Init()
 	local Ui = Core:GetController("UiController")
@@ -46,6 +53,21 @@ function StoreController:Init()
 	self.frame = Frame
 	self.scrolling = Scrolling
 	self.cash = Scrolling:WaitForChild("TextCash") :: GuiObject
+
+	local Effect = StoreButton:WaitForChild("Effect") :: ImageLabel
+	TweenService:Create(Effect, SpinInfo, { Rotation = Effect.Rotation + 360 }):Play()
+	local Icon = StoreButton:WaitForChild("Icon") :: GuiObject
+	local Rest = Icon.Position
+	local Tilt = Icon.Rotation
+	task.spawn(function()
+		while true do
+			task.wait(JumpDelay)
+			local Rise = TweenService:Create(Icon, RiseInfo, { Position = Rest - UDim2.fromScale(0, JumpHeight), Rotation = Tilt + JumpTilt })
+			Rise:Play()
+			Rise.Completed:Wait()
+			TweenService:Create(Icon, FallInfo, { Position = Rest, Rotation = Tilt }):Play()
+		end
+	end)
 
 	UiFade.BindButtonSize(StoreButton)
 	UiFade.BindButton(CoinButton)

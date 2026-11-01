@@ -183,6 +183,21 @@ Commands = {
 		end,
 	},
 	{
+		Name = "spent",
+		Usage = "spent <amount> [player]",
+		Description = "Set the Robux spent shown on the top spenders leaderboard (0 removes the player)",
+		Arguments = 1,
+		Run = function(Admin, Args)
+			local Value = Amount(Args[1], 0)
+			local Player = Target(Admin, Args[2])
+			if Player.UserId <= 0 then
+				error("Test players are not shown on the leaderboards", 0)
+			end
+			Core:GetService("LeaderboardService"):Set(Player, Value)
+			return "Robux spent set to " .. Value .. " - " .. Player.Name
+		end,
+	},
+	{
 		Name = "level",
 		Usage = "level <number> [player]",
 		Description = "Set the level and teleport to its SpawnLocation (the next Play starts from its SpawnPart)",

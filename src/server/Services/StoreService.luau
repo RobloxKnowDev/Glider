@@ -29,10 +29,18 @@ type Pack = {
 	Crate: string?,
 }
 
+local Inventory = {
+	Gliders = true,
+	Trails = true,
+}
+
 local Packs: { [string]: { [string]: Pack } } = {}
 local Products: { [number]: Pack } = {}
 local Passes: { [string]: Pack } = {}
 for Section, List in pairs(Store) do
+	if Inventory[Section] then
+		continue
+	end
 	Packs[Section] = {}
 	for _, Pack in ipairs(List) do
 		Packs[Section][Pack.Name] = Pack
@@ -121,6 +129,7 @@ function StoreService:ProcessReceipt(Receipt): Enum.ProductPurchaseDecision
 	end
 	return Core:GetService("DataService"):ProcessPurchase(Player, Receipt.PurchaseId, function()
 		Grant(Player, Pack)
+		Core:GetService("LeaderboardService"):Spend(Player, Receipt.CurrencySpent)
 		return true
 	end)
 end

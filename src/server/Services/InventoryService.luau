@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
+local Store = require(ReplicatedStorage.Shared.Config.Store)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 
 local InventoryService = {
@@ -21,6 +22,10 @@ local InventoryService = {
 }
 
 type Entry = {
+	Name: string,
+}
+
+type Pack = {
 	Name: string,
 	Gamepass: number?,
 	Price: number?,
@@ -45,6 +50,10 @@ local StudioUnlocked: { [string]: boolean } = {}
 local Testing = RunService:IsStudio()
 local PromptDistance = 10
 local AnchorSize = Vector3.one * 0.2
+local Npcs = {
+	GliderNpc = "Gliders",
+	TrailNpc = "Trails",
+}
 local Robux = "\u{E002}"
 
 local function Unlocked(Category: string): boolean
@@ -58,14 +67,14 @@ for Category, Catalog in pairs(Catalogs) do
 	Gamepasses[Category] = {}
 	for _, Entry in ipairs(Catalog.List) do
 		Items[Category][Entry.Name] = true
-		Gamepasses[Category][Entry.Name] = Entry.Gamepass
+	end
+	for _, Pack in ipairs(Store[Category]) do
+		Gamepasses[Category][Pack.Name] = Pack.Gamepass
 	end
 end
-local Offers: { [string]: Entry } = {}
-for _, Entry in ipairs(Catalogs.Gliders.List) do
-	if Entry.Gamepass then
-		Offers[Entry.Name] = Entry
-	end
+local Offers: { [string]: Pack } = {}
+for _, Pack in ipairs(Store.Gliders) do
+	Offers[Pack.Name] = Pack
 end
 
 local States: { [Player]: { [string]: Inventory } } = {}
@@ -177,7 +186,7 @@ function InventoryService:CheckGamepasses(Player: Player)
 	end
 end
 
-function InventoryService:Display(Model: Model, Entry: Entry)
+function InventoryService:Display(Model: Model, Pack: Pack)
 	local Box, Size = Model:GetBoundingBox()
 	local Anchor = Instance.new("Part")
 	Anchor.Name = "Prompt"
@@ -190,7 +199,7 @@ function InventoryService:Display(Model: Model, Entry: Entry)
 	Anchor.CanTouch = false
 
 	local Prompt = Instance.new("ProximityPrompt")
-	Prompt.ObjectText = Entry.Name .. " Glider"
+	Prompt.ObjectText = Pack.Name .. " Glider"
 	Prompt.ActionText = "Buy"
 	Prompt.HoldDuration = 0
 	Prompt.MaxActivationDistance = PromptDistance + Size.Magnitude / 2
@@ -198,8 +207,19 @@ function InventoryService:Display(Model: Model, Entry: Entry)
 	Prompt.Parent = Anchor
 	Anchor.Parent = Model
 	task.spawn(function()
-		Prompt.ActionText = RobuxPrice(Entry) .. Robux
+		Prompt.ActionText = RobuxPrice(Pack) .. Robux
 	end)
+end
+
+function InventoryService:Npc(Part: BasePart, Category: string)
+	local Prompt = Instance.new("ProximityPrompt")
+	Prompt.ObjectText = Category
+	Prompt.ActionText = "Open"
+	Prompt.HoldDuration = 0
+	Prompt.MaxActivationDistance = PromptDistance
+	Prompt.RequiresLineOfSight = false
+	Prompt:SetAttribute("Inventory", Category)
+	Prompt.Parent = Part
 end
 
 function InventoryService:Init()
@@ -255,9 +275,17 @@ end
 
 function InventoryService:Start()
 	for _, Model in ipairs(Workspace:WaitForChild("RotatingGliders"):GetChildren()) do
-		local Entry = Offers[Model.Name]
-		if Entry then
-			self:Display(Model :: Model, Entry)
+		local Pack = Offers[Model.Name]
+		if Pack then
+			self:Display(Model :: Model, Pack)
+		end
+	end
+	for _, Stand in ipairs(Workspace:WaitForChild("Lobby"):WaitForChild("Stands"):GetChildren()) do
+		local Skins = Stand:FindFirstChild("Skins")
+		if Skins then
+			for Npc, Category in pairs(Npcs) do
+				self:Npc(Skins:WaitForChild(Npc):WaitForChild("HumanoidRootPart") :: BasePart, Category)
+			end
 		end
 	end
 	Players.PlayerAdded:Connect(function(Player)

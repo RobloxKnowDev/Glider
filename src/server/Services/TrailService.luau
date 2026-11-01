@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local TrailsConfig = require(ReplicatedStorage.Shared.Config.Trails)
 
@@ -55,10 +56,16 @@ local ParticleTransparency = NumberSequence.new({
 local Colors: { [string]: ColorSequence } = {}
 local Sparkles: { [string]: ColorSequence } = {}
 local Particles: { [string]: string } = {}
+local Multipliers: { [string]: number } = {}
 for _, Entry in ipairs(TrailsConfig.List) do
 	Colors[Entry.Name] = Entry.Color
 	Sparkles[Entry.Name] = Entry.Sparkles
 	Particles[Entry.Name] = Entry.Particle
+	Multipliers[Entry.Name] = Entry.Multiplier
+end
+
+function TrailService:Boost(Player: Player, Amount: number): number
+	return Amount * Multipliers[Core:GetService("InventoryService"):GetEquipped(Player, "Trails")]
 end
 
 function TrailService:Attach(Bar: BasePart, Frame: CFrame, Name: string)

@@ -30,6 +30,7 @@ local CrateController = {
 type Entry = {
 	Name: string,
 	Rarity: string,
+	Multiplier: number?,
 }
 
 type Card = {
@@ -115,12 +116,15 @@ function CrateController:Card(Index: number): Card
 
 	local Viewport = Clone:WaitForChild("ViewportFrame") :: ViewportFrame
 	local Icon = Clone:WaitForChild("IconTrail") :: ImageLabel
+	local Multiplier = Clone:WaitForChild("Multiplier") :: TextLabel
 	Viewport.Visible = Reward.Category == "Gliders"
 	Icon.Visible = Reward.Category == "Trails"
+	Multiplier.Visible = Reward.Category == "Trails"
 	if Reward.Category == "Gliders" then
 		GliderShowcase(Viewport, self.models:WaitForChild(Reward.Name) :: Model)
 	else
 		Icon.Image = Images.Trail[Reward.Name]
+		Translation.Set(Multiplier, "x{1} Cash", Entry.Multiplier)
 	end
 
 	local Scale = Instance.new("UIScale")

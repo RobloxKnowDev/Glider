@@ -19,7 +19,14 @@ type Run = {
 	Clean: boolean,
 }
 
-local Records: { [Player]: number } = {}
+local Sections = {
+	Solo = "Record",
+	Duo = "DuoRecord",
+}
+local Records: { [string]: { [Player]: number } } = {
+	Solo = {},
+	Duo = {},
+}
 local Runs: { [Player]: Run } = {}
 
 function RecordService:Run(Player: Player): Run
@@ -51,7 +58,11 @@ function RecordService:Taint(Player: Player)
 	self:Run(Player).Clean = false
 end
 
-function RecordService:Finish(Player: Player): (number, boolean)
+function RecordService:Push(Player: Player)
+	Remotemanager:FireClient(self.Name, "Updated", Player, Records.Solo[Player], Records.Duo[Player])
+end
+
+function RecordService:Finish(Player: Player, Mode: string): (number, boolean)
 	self:Pause(Player)
 	local Levels = Core:GetService("LevelService")
 	local Run = self:Run(Player)
@@ -59,32 +70,36 @@ function RecordService:Finish(Player: Player): (number, boolean)
 	if Levels:Get(Player) <= Levels:Count() or not Run.Clean then
 		return Time, false
 	end
-	local Record = Records[Player]
+	local Record = Records[Mode][Player]
 	if Record and Record <= Time then
 		return Time, false
 	end
-	Records[Player] = Time
-	Remotemanager:FireClient(self.Name, "Updated", Player, Time)
+	Records[Mode][Player] = Time
+	self:Push(Player)
+	Core:GetService("LeaderboardService"):Post(Mode, Player, Time, true)
 	return Time, true
 end
 
 function RecordService:Init()
-	Core:GetService("DataService"):Register("Record", {
-		Load = function(Player, Saved)
-			Records[Player] = Saved
-			Remotemanager:FireClient(self.Name, "Updated", Player, Saved)
-		end,
-		Save = function(Player)
-			return Records[Player]
-		end,
-		Clear = function(Player)
-			Records[Player] = nil
-		end,
-	})
+	for Mode, Section in pairs(Sections) do
+		Core:GetService("DataService"):Register(Section, {
+			Load = function(Player, Saved)
+				Records[Mode][Player] = Saved
+				self:Push(Player)
+				Core:GetService("LeaderboardService"):Post(Mode, Player, Saved, false)
+			end,
+			Save = function(Player)
+				return Records[Mode][Player]
+			end,
+			Clear = function(Player)
+				Records[Mode][Player] = nil
+			end,
+		})
+	end
 
 	Remotemanager:OnServerInvoke(self.Name, "GetRecord", function(Player)
 		Core:GetService("DataService"):WaitForLoad(Player)
-		return Records[Player]
+		return Records.Solo[Player], Records.Duo[Player]
 	end)
 	Players.PlayerRemoving:Connect(function(Player)
 		Runs[Player] = nil

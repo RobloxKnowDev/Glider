@@ -92,6 +92,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 
 	local SceneryController = Core:GetController("SceneryController")
 	local RiderController = Core:GetController("RiderController")
+	local ArrowController = Core:GetController("ArrowController")
 	local Seats = Glider:WaitForChild("Riders")
 	local Mine = Seats:WaitForChild(tostring(Player.UserId)) :: Weld
 	local Me = RiderController:Track(Mine)
@@ -184,11 +185,12 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		SceneryController:Aim(Root.Position.Y)
 
 		local View = Camera.CFrame.LookVector
-		local Offset = math.clamp(
-			Me.Offset + Humanoid.MoveDirection:Dot(Vector3.new(-View.Z, 0, View.X).Unit) * RiderSpeed * Dt,
-			-Limit,
-			Limit
+		local Side = math.clamp(
+			Humanoid.MoveDirection:Dot(Vector3.new(-View.Z, 0, View.X).Unit) + ArrowController:Direction(),
+			-1,
+			1
 		)
+		local Offset = math.clamp(Me.Offset + Side * RiderSpeed * Dt, -Limit, Limit)
 		local Total = 0
 		local Count = 1
 		for _, Rider in ipairs(Crew) do

@@ -26,10 +26,6 @@ local OpenMargin = 10
 local EventCheck = 30
 local Generator = Random.new()
 local Opening: { [Player]: boolean } = {}
-local Npcs = {
-	GliderNpc = "BasicGlider",
-	TrailNpc = "BasicTrail",
-}
 local Spots: { [string]: { BasePart } } = {}
 
 local function Live(Name: string): boolean
@@ -120,14 +116,6 @@ function CrateService:Start()
 		end
 		Spots[Name] = {}
 		self:Prompt(Crate:WaitForChild("Box") :: BasePart, Name)
-	end
-	for _, Stand in ipairs(Workspace:WaitForChild("Lobby"):WaitForChild("Stands"):GetChildren()) do
-		local Skins = Stand:FindFirstChild("Skins")
-		if Skins then
-			for Npc, Name in pairs(Npcs) do
-				self:Prompt(Skins:WaitForChild(Npc):WaitForChild("HumanoidRootPart") :: BasePart, Name)
-			end
-		end
 	end
 	task.spawn(function()
 		while true do

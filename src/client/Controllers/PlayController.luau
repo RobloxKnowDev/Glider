@@ -255,6 +255,7 @@ function PlayController:Init()
 	local function Answer(Accepted: boolean)
 		self.token += 1
 		Message.Visible = false
+		Ui:Release()
 		Remotemanager:FireServer("DuoService", "Answer", self.inviter, Accepted)
 	end
 	AcceptButton.Activated:Connect(function()
@@ -270,10 +271,12 @@ function PlayController:Init()
 		Translation.Set(MessageText, "{1} invites you to play duo!", From.DisplayName)
 		Message.Visible = true
 		UiFade.Pop(Message)
+		Ui:Point(AcceptButton)
 		Sfx.Play(Sounds.Duo.Invited, InvitedVolume)
 		task.delay(Timeout, function()
 			if self.token == Token then
 				Message.Visible = false
+				Ui:Release()
 			end
 		end)
 	end)
@@ -292,11 +295,11 @@ function PlayController:Init()
 		Ui:Close()
 		self.token += 1
 		Message.Visible = false
-		Gui.Enabled = false
+		PlayButton.Visible = false
 		Left.Visible = false
 	end)
 	Remotemanager:OnClientEvent("GliderService", "Stopped", function()
-		Gui.Enabled = true
+		PlayButton.Visible = true
 		Left.Visible = true
 	end)
 end

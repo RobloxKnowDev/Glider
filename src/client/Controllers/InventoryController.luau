@@ -11,6 +11,7 @@ local TrailsConfig = require(ReplicatedStorage.Shared.Config.Trails)
 local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
+local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
@@ -32,6 +33,11 @@ type Style = {
 type Entry = {
 	Name: string,
 	Rarity: string,
+	Multiplier: number?,
+}
+
+type Pack = {
+	Name: string,
 	Gamepass: number?,
 	Price: number?,
 }
@@ -44,8 +50,7 @@ type Catalog = {
 type Card = {
 	Category: string,
 	Name: string,
-	Entry: Entry,
-	Gamepass: boolean,
+	Pack: Pack?,
 	Price: number?,
 	Clone: GuiObject,
 	Button: GuiButton,
@@ -132,6 +137,7 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	else
 		local Icon = Holder:WaitForChild("Icon") :: ImageLabel
 		Icon.Image = Images.Trail[Entry.Name]
+		Translation.Set(Holder:WaitForChild("Multiplier") :: TextLabel, "x{1} Cash", Entry.Multiplier)
 	end
 
 	local Lock = Instance.new("Frame")
@@ -145,12 +151,12 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	Corner.Parent = Lock
 	Lock.Parent = Holder
 
+	local Pack = self.offers[Category][Entry.Name]
 	local Card: Card = {
 		Category = Category,
 		Name = Entry.Name,
-		Entry = Entry,
-		Gamepass = Entry.Gamepass ~= nil,
-		Price = Entry.Price,
+		Pack = Pack,
+		Price = Pack and Pack.Price,
 		Clone = Clone,
 		Button = Button,
 		Stroke = Button:WaitForChild("UIStroke") :: UIStroke,
@@ -158,14 +164,14 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 		TextStroke = Text:WaitForChild("UIStroke") :: UIStroke,
 		Lock = Lock,
 	}
-	if Card.Gamepass then
+	if Pack then
 		Button.ZIndex = LockZIndex + 1
 	end
 	UiFade.BindButton(Button)
 	Button.Activated:Connect(function()
 		local Inventory = self.state[Category]
 		if not Inventory.Owned[Card.Name] then
-			if Card.Gamepass then
+			if Pack then
 				Remotemanager:FireServer("InventoryService", "Buy", Category, Card.Name)
 			else
 				Sfx.Play(Sounds.Ui.Negative, LockedVolume)
@@ -203,8 +209,8 @@ function InventoryController:Apply(State)
 	for _, Card in ipairs(self.cards) do
 		local Inventory = State[Card.Category]
 		local Owned = Inventory.Owned[Card.Name] == true
-		Card.Lock.Visible = not Owned and not Card.Gamepass
-		if not Owned and Card.Gamepass then
+		Card.Lock.Visible = not Owned and not Card.Pack
+		if not Owned and Card.Pack then
 			Paint(Card, BuyStyle, Card.Price .. Robux)
 		elseif not Owned then
 			Paint(Card, LockedStyle, "Locked")
@@ -224,13 +230,20 @@ function InventoryController:Page(Category: string, Catalog: Catalog, Gui: Insta
 	local CloseButton = Frame:WaitForChild("Top"):WaitForChild("CloseButton") :: GuiButton
 	Template.Parent = nil
 	Frame.Visible = false
+	self.frames[Category] = Frame
+
+	local Offers: { [string]: Pack } = {}
+	for _, Pack in ipairs(Store[Category]) do
+		Offers[Pack.Name] = Pack
+	end
+	self.offers[Category] = Offers
 
 	local Order: { [Entry]: number } = {}
 	for Index, Entry in ipairs(Catalog.List) do
 		Order[Entry] = Index
 	end
 	local function Group(Entry: Entry): number
-		return if Entry.Name == Catalog.Default then 0 elseif Entry.Gamepass then 1 else 1 + Rarities[Entry.Rarity].Rank
+		return if Entry.Name == Catalog.Default then 0 elseif Offers[Entry.Name] then 1 else 1 + Rarities[Entry.Rarity].Rank
 	end
 	local Sorted = table.clone(Catalog.List)
 	table.sort(Sorted, function(A, B)
@@ -263,6 +276,8 @@ function InventoryController:Init()
 	self.cards = {}
 	self.spinners = {}
 	self.prompts = {} :: { [ProximityPrompt]: string }
+	self.frames = {} :: { [string]: GuiObject }
+	self.offers = {} :: { [string]: { [string]: Pack } }
 	local Display = Workspace:WaitForChild("RotatingGliders")
 
 	self:Page("Gliders", GlidersConfig, PlayerGui:WaitForChild("GliderUi"), Left:WaitForChild("GliderButton") :: GuiButton)
@@ -284,8 +299,12 @@ function InventoryController:Init()
 	end)
 	ProximityPromptService.PromptTriggered:Connect(function(Prompt)
 		local Name = self.prompts[Prompt]
+		local Category = Prompt:GetAttribute("Inventory")
 		if Name then
 			self:Offer(Name)
+		elseif Category then
+			UiFade.Click()
+			Core:GetController("UiController"):Open(self.frames[Category])
 		end
 	end)
 
@@ -311,9 +330,10 @@ function InventoryController:Start()
 		self:Apply(Remotemanager:InvokeServer("InventoryService", "GetState"))
 	end)
 	for _, Card in ipairs(self.cards) do
-		if Card.Gamepass then
+		local Pack = Card.Pack
+		if Pack then
 			task.spawn(function()
-				Card.Price = RobuxPrice(Card.Entry)
+				Card.Price = RobuxPrice(Pack)
 				self:Apply(self.state)
 			end)
 		end

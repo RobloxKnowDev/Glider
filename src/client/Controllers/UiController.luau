@@ -1,7 +1,9 @@
+local GamepadService = game:GetService("GamepadService")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
@@ -15,6 +17,8 @@ local BlurSize = 16
 local FieldOfViewZoom = 8
 local ShadeTransparency = 0.6
 local Transition = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local ToggleKey = Enum.KeyCode.DPadUp
+local HideKey = Enum.KeyCode.ButtonB
 
 function UiController:Backdrop(Shown: boolean)
 	TweenService:Create(self.blur, Transition, { Size = if Shown then BlurSize else 0 }):Play()
@@ -22,6 +26,18 @@ function UiController:Backdrop(Shown: boolean)
 	TweenService:Create(Workspace.CurrentCamera, Transition, {
 		FieldOfView = if Shown then self.fieldOfView - FieldOfViewZoom else self.fieldOfView,
 	}):Play()
+end
+
+function UiController:Point(Target: GuiObject?)
+	if UserInputService.PreferredInput == Enum.PreferredInput.Gamepad then
+		GamepadService:EnableGamepadCursor(Target)
+		self.cursor = true
+	end
+end
+
+function UiController:Release()
+	GamepadService:DisableGamepadCursor()
+	self.cursor = false
 end
 
 function UiController:Open(Frame: GuiObject)
@@ -38,9 +54,11 @@ function UiController:Open(Frame: GuiObject)
 	self.current = Frame
 	Frame.Visible = true
 	UiFade.Pop(Frame)
+	self:Point(Frame)
 end
 
 function UiController:Close()
+	self:Release()
 	if not self.current then
 		return
 	end
@@ -77,6 +95,15 @@ function UiController:Init()
 	self.shade.BorderSizePixel = 0
 	self.shade.Parent = self.layer
 	self.layer.Parent = PlayerGui
+
+	self.cursor = false
+	UserInputService.InputBegan:Connect(function(Input)
+		if Input.KeyCode == ToggleKey and not self.cursor then
+			self:Point(nil)
+		elseif Input.KeyCode == ToggleKey or Input.KeyCode == HideKey then
+			self:Release()
+		end
+	end)
 end
 
 return UiController

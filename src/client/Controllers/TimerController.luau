@@ -38,7 +38,7 @@ local MarkerSize = 34
 local MarkerSpacing = 22
 local FlagSize = 22
 local LeaveGap = 20
-local LeaveWidth = 110
+local LeaveWidth = 160
 local LeaveHeight = 44
 local BestHeight = 24
 local BestMargin = 10
@@ -212,10 +212,13 @@ function TimerController:Reset()
 	Translation.Raw(self.timer, Format(0))
 end
 
-function TimerController:Record(Time: number?)
+function TimerController:Record()
+	local Duo = Player:GetAttribute("Grouped")
+	local Time = if Duo then self.duo else self.solo
 	local Text = if Time then Format(Time) else "--:--.--"
-	Translation.Set(self.best, "Best: {1}", Text)
-	Translation.Set(self.lobby, "Best: {1}", Text)
+	local Pattern = if Duo then "Best Duo: {1}" else "Best Solo: {1}"
+	Translation.Set(self.best, Pattern, Text)
+	Translation.Set(self.lobby, Pattern, Text)
 end
 
 function TimerController:Finish()
@@ -292,7 +295,7 @@ function TimerController:Init()
 	Leave.Size = UDim2.fromOffset(LeaveWidth, LeaveHeight)
 	Leave.Visible = true
 	Leave.Parent = Top
-	Translation.Set(Leave:WaitForChild("Text") :: TextLabel, "Leave")
+	Translation.Set(Leave:WaitForChild("Text") :: TextLabel, "Leave Race")
 
 	local Texture = Instance.new("ImageLabel")
 	Texture.Name = "Texture"
@@ -327,7 +330,12 @@ function TimerController:Init()
 	self.best = Best
 	self.lobby = Hud:WaitForChild("BestText") :: TextLabel
 	self.elapsed = 0
-	self:Record(nil)
+	self.solo = nil :: number?
+	self.duo = nil :: number?
+	self:Record()
+	Player:GetAttributeChangedSignal("Grouped"):Connect(function()
+		self:Record()
+	end)
 
 	Remotemanager:OnClientEvent("GliderService", "Started", function(Name, _, Route)
 		self:Begin(Name, Route)
@@ -344,14 +352,17 @@ function TimerController:Init()
 	Remotemanager:OnClientEvent("LevelService", "Reset", function()
 		self:Reset()
 	end)
-	Remotemanager:OnClientEvent("RecordService", "Updated", function(Time)
-		self:Record(Time)
+	Remotemanager:OnClientEvent("RecordService", "Updated", function(Solo, Duo)
+		self.solo = Solo
+		self.duo = Duo
+		self:Record()
 	end)
 end
 
 function TimerController:Start()
 	task.spawn(function()
-		self:Record(Remotemanager:InvokeServer("RecordService", "GetRecord"))
+		self.solo, self.duo = Remotemanager:InvokeServer("RecordService", "GetRecord")
+		self:Record()
 	end)
 end
 

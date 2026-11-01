@@ -22,7 +22,7 @@
 
     "StarterGui": {
       "$properties": {
-        "VirtualCursorMode": "Default"
+        "VirtualCursorMode": "Enabled"
       },
       "$ignoreUnknownInstances": true
     },

@@ -136,6 +136,10 @@ local function Measure(Model: Model): Ring
 	return { Model = Model, Frame = Frame, Axis = Vector3.zAxis, Radius = math.min(Size.X, Size.Y) / 2 }
 end
 
+local function Earning(Player: Player, Amount: number): number
+	return Core:GetService("FriendService"):Boost(Player, Core:GetService("TrailService"):Boost(Player, Amount))
+end
+
 function GliderService:IsFlying(Player: Player): boolean
 	return Flights[Player] ~= nil or Pending[Player] ~= nil
 end
@@ -285,7 +289,7 @@ function GliderService:Advance(Flight: Flight, Reward: number)
 	end
 	if self.levels[Next] then
 		for Player in pairs(Flight.Riders) do
-			StudsService:Add(Player, Reward)
+			StudsService:Add(Player, Earning(Player, Reward))
 		end
 		Flight.Level = Next
 		Flight.Glider:SetAttribute("Level", Next)
@@ -293,14 +297,21 @@ function GliderService:Advance(Flight: Flight, Reward: number)
 	end
 	local Times: { [Player]: number } = {}
 	local Records: { [Player]: boolean } = {}
+	local Gains: { [Player]: number } = {}
+	local Crew = 0
+	for _ in pairs(Flight.Riders) do
+		Crew += 1
+	end
+	local Mode = if Crew > 1 then "Duo" else "Solo"
 	for Player in pairs(Flight.Riders) do
-		Times[Player], Records[Player] = Core:GetService("RecordService"):Finish(Player)
-		StudsService:Credit(Player, Reward)
+		Times[Player], Records[Player] = Core:GetService("RecordService"):Finish(Player, Mode)
+		Gains[Player] = Earning(Player, Reward)
+		StudsService:Credit(Player, Gains[Player])
 	end
 	self:Dismount(Flight)
 	for Player in pairs(Flight.Riders) do
 		Core:GetService("LevelService"):Reset(Player)
-		StudsService:Push(Player, Reward)
+		StudsService:Push(Player, Gains[Player])
 		Remotemanager:FireClient(self.Name, "Completed", Player, Times[Player], Records[Player])
 	end
 end
@@ -413,7 +424,7 @@ function GliderService:Collect(Flight: Flight)
 				if (Hit - Ring.Axis * Hit:Dot(Ring.Axis)).Magnitude <= Ring.Radius then
 					Flight.Collected[Ring.Model] = true
 					for Player in pairs(Flight.Riders) do
-						Core:GetService("StudsService"):Add(Player, Ring.Model:GetAttribute("Reward"))
+						Core:GetService("StudsService"):Add(Player, Earning(Player, Ring.Model:GetAttribute("Reward")))
 						Remotemanager:FireClient(self.Name, "Ring", Player, Ring.Model)
 					end
 				end

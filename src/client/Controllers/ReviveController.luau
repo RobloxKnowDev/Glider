@@ -47,10 +47,14 @@ end
 
 function ReviveController:Show()
 	self.seconds = -1
-	Core:GetController("UiController"):Close()
+	local Ui = Core:GetController("UiController")
+	Ui:Close()
 	self:Tick()
 	self.frame.Visible = true
 	UiFade.Pop(self.frame)
+	if self.pilot == Player then
+		Ui:Point(self.continueButton)
+	end
 	self.loop = RunService.RenderStepped:Connect(function()
 		self:Tick()
 	end)
@@ -63,6 +67,7 @@ function ReviveController:Hide()
 	self.loop:Disconnect()
 	self.loop = nil
 	self.frame.Visible = false
+	Core:GetController("UiController"):Release()
 end
 
 function ReviveController:Init()
