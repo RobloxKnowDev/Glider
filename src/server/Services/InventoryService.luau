@@ -108,6 +108,10 @@ function InventoryService:Push(Player: Player)
 	Remotemanager:FireClient(self.Name, "Updated", Player, self:EnsurePlayer(Player))
 end
 
+function InventoryService:Owns(Player: Player, Category: string, Name: string): boolean
+	return self:EnsurePlayer(Player)[Category].Owned[Name] == true
+end
+
 function InventoryService:Give(Player: Player, Category: string, Name: string): boolean
 	local Owned = self:EnsurePlayer(Player)[Category].Owned
 	if Owned[Name] then

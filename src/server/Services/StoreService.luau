@@ -14,13 +14,22 @@ local StoreService = {
 		Obtained = "Event",
 		GetPasses = "Function",
 		Claimed = "Event",
+		Gifted = "Event",
+		Sent = "Event",
+		Refused = "Event",
 	},
+}
+
+type Gift = {
+	Product: number,
+	Target: Player,
 }
 
 type Pack = {
 	Name: string,
 	Product: number?,
 	Gamepass: number?,
+	Gift: number?,
 	Studs: number?,
 	Trail: string?,
 	Revives: number?,
@@ -29,30 +38,37 @@ type Pack = {
 	Crate: string?,
 }
 
+type Sale = {
+	Section: string,
+	Pack: Pack,
+}
+
 local Inventory = {
 	Gliders = true,
 	Trails = true,
 }
 
 local Packs: { [string]: { [string]: Pack } } = {}
-local Products: { [number]: Pack } = {}
+local Products: { [number]: Sale } = {}
 local Passes: { [string]: Pack } = {}
 for Section, List in pairs(Store) do
-	if Inventory[Section] then
-		continue
-	end
 	Packs[Section] = {}
 	for _, Pack in ipairs(List) do
 		Packs[Section][Pack.Name] = Pack
-		if Pack.Gamepass then
+		local Sale = { Section = Section, Pack = Pack }
+		if Pack.Gift then
+			Products[Pack.Gift] = Sale
+		end
+		if Pack.Product then
+			Products[Pack.Product] = Sale
+		elseif not Inventory[Section] then
 			Passes[Section .. "." .. Pack.Name] = Pack
-		else
-			Products[Pack.Product] = Pack
 		end
 	end
 end
 
 local Claimed: { [Player]: { [string]: boolean } } = {}
+local Gifts: { [Player]: Gift } = {}
 
 local function Grant(Player: Player, Pack: Pack)
 	if Pack.Studs then
@@ -73,6 +89,42 @@ local function Grant(Player: Player, Pack: Pack)
 	if Pack.Crate then
 		Core:GetService("CrateService"):Roll(Player, Pack.Crate)
 	end
+end
+
+local function Owns(Player: Player, Section: string, Pack: Pack): boolean
+	if Inventory[Section] then
+		return Core:GetService("InventoryService"):Owns(Player, Section, Pack.Name)
+	end
+	return Pack.Gamepass ~= nil and StoreService:EnsurePlayer(Player)[Section .. "." .. Pack.Name] == true
+end
+
+local function Present(Player: Player, Section: string, Pack: Pack)
+	if Inventory[Section] then
+		Core:GetService("InventoryService"):Give(Player, Section, Pack.Name)
+	elseif Pack.Gamepass then
+		StoreService:Claim(Player, Section .. "." .. Pack.Name)
+	else
+		Grant(Player, Pack)
+	end
+end
+
+local function Deliver(Player: Player, Target: Player?, Section: string, Pack: Pack)
+	local Data = Core:GetService("DataService")
+	local Recipient = if Target and Data:IsLoaded(Target) and not Owns(Target, Section, Pack) then Target else Player
+	Present(Recipient, Section, Pack)
+	if Recipient == Player then
+		return
+	end
+	Remotemanager:FireClient(StoreService.Name, "Gifted", Recipient, Player.DisplayName, Section, Pack.Name)
+	Remotemanager:FireClient(StoreService.Name, "Sent", Player, Recipient.DisplayName, Section, Pack.Name)
+	task.spawn(Data.Save, Data, Recipient)
+end
+
+local function Giftable(Player: Player, Target: any): boolean
+	return typeof(Target) == "Instance"
+		and Target:IsA("Player")
+		and Target ~= Player
+		and Core:GetService("DataService"):IsLoaded(Target)
 end
 
 function StoreService:EnsurePlayer(Player: Player): { [string]: boolean }
@@ -104,31 +156,51 @@ function StoreService:Claim(Player: Player, Key: string)
 	task.spawn(Data.Save, Data, Player)
 end
 
-function StoreService:Buy(Player: Player, Section: any, Name: any)
+function StoreService:Buy(Player: Player, Section: any, Name: any, Target: any)
 	local List = Packs[Section]
 	local Pack = List and List[Name]
-	if not Pack or not Core:GetService("DataService"):IsLoaded(Player) then
+	if not Pack or not Core:GetService("DataService"):IsLoaded(Player) or (Target ~= nil and not Giftable(Player, Target)) then
 		return
 	end
-	if Pack.Gamepass == 0 then
-		self:Claim(Player, Section .. "." .. Name)
-	elseif Pack.Gamepass then
-		MarketplaceService:PromptGamePassPurchase(Player, Pack.Gamepass)
-	elseif Pack.Product == 0 then
-		Grant(Player, Pack)
+	if Target == nil and Inventory[Section] then
+		Core:GetService("InventoryService"):Buy(Player, Section, Name)
+		return
+	end
+	if Target and Owns(Target, Section, Pack) then
+		Remotemanager:FireClient(self.Name, "Refused", Player, Target.DisplayName)
+		return
+	end
+	if Pack.Gamepass and not Target then
+		if Pack.Gamepass == 0 then
+			self:Claim(Player, Section .. "." .. Name)
+		else
+			MarketplaceService:PromptGamePassPurchase(Player, Pack.Gamepass)
+		end
+		return
+	end
+	local Product = Pack.Gift or Pack.Product
+	if Product == 0 then
+		Deliver(Player, Target, Section, Pack)
 	else
-		MarketplaceService:PromptProductPurchase(Player, Pack.Product)
+		Gifts[Player] = if Target then { Product = Product, Target = Target } else nil
+		MarketplaceService:PromptProductPurchase(Player, Product)
 	end
 end
 
 function StoreService:ProcessReceipt(Receipt): Enum.ProductPurchaseDecision
 	local Player = Players:GetPlayerByUserId(Receipt.PlayerId)
-	local Pack = Products[Receipt.ProductId]
-	if not Player or not Pack then
+	local Sale = Products[Receipt.ProductId]
+	if not Player or not Sale then
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
 	return Core:GetService("DataService"):ProcessPurchase(Player, Receipt.PurchaseId, function()
-		Grant(Player, Pack)
+		local Gift = Gifts[Player]
+		local Target = nil
+		if Gift and Gift.Product == Receipt.ProductId then
+			Gifts[Player] = nil
+			Target = Gift.Target
+		end
+		Deliver(Player, Target, Sale.Section, Sale.Pack)
 		Core:GetService("LeaderboardService"):Spend(Player, Receipt.CurrencySpent)
 		return true
 	end)
@@ -162,8 +234,8 @@ function StoreService:Init()
 		end,
 	})
 
-	Remotemanager:OnServerEvent(self.Name, "Buy", function(Player, Section, Name)
-		self:Buy(Player, Section, Name)
+	Remotemanager:OnServerEvent(self.Name, "Buy", function(Player, Section, Name, Target)
+		self:Buy(Player, Section, Name, Target)
 	end)
 	Remotemanager:OnServerInvoke(self.Name, "GetPasses", function(Player)
 		Core:GetService("DataService"):WaitForLoad(Player)
@@ -187,6 +259,9 @@ end
 function StoreService:Start()
 	Players.PlayerAdded:Connect(function(Player)
 		self:CheckGamepasses(Player)
+	end)
+	Players.PlayerRemoving:Connect(function(Player)
+		Gifts[Player] = nil
 	end)
 	for _, Player in ipairs(Players:GetPlayers()) do
 		task.spawn(self.CheckGamepasses, self, Player)

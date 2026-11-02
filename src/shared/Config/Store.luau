@@ -27,14 +27,22 @@ return {
 		{ Name = "Halloween", Crate = "Halloween", Product = 3726799969, Price = 129 },
 	},
 	Gliders = {
-		{ Name = "67", Gamepass = 2064075650, Price = 199 },
-		{ Name = "Golden", Gamepass = 2064177569, Price = 149 },
-		{ Name = "Battle Royal", Gamepass = 2064127515, Price = 149 },
+		{ Name = "67", Gamepass = 2064075650, Gift = 3727414884, Price = 199 },
+		{ Name = "Golden", Gamepass = 2064177569, Gift = 3727415000, Price = 149 },
+		{ Name = "Battle Royal", Gamepass = 2064127515, Gift = 3727415112, Price = 149 },
 	},
 	Trails = {
-		{ Name = "Heart", Gamepass = 2064037647, Price = 199 },
+		{ Name = "Heart", Gamepass = 2064037647, Gift = 3727415644, Price = 199 },
 	},
 	StarterPack = {
-		{ Name = "BuyButton", Studs = 5_000, Trail = "Sunset", Spins = 2, Gamepass = 2064268751, Price = 99 },
+		{
+			Name = "BuyButton",
+			Studs = 5_000,
+			Trail = "Sunset",
+			Spins = 2,
+			Gamepass = 2064268751,
+			Gift = 3727415385,
+			Price = 99,
+		},
 	},
 }
