@@ -32,6 +32,12 @@ local TextColor = Color3.new(1, 1, 1)
 local OutlineColor = Color3.new(0, 0, 0)
 local BestColor = Color3.fromRGB(21, 255, 0)
 local BestStroke = Color3.fromRGB(26, 98, 0)
+local CheckpointTop = Color3.fromRGB(215, 255, 150)
+local CheckpointBottom = Color3.fromRGB(40, 210, 20)
+local CheckpointStroke = Color3.fromRGB(20, 85, 0)
+local CheckpointY = 0.3
+local CheckpointHeight = 0.13
+local CheckpointHold = 1.6
 local InfoThickness = 2.5
 local SlamScale = 2.5
 local SlamTilt = -6
@@ -89,6 +95,52 @@ function CompleteController:Label(Name: string, Color: Color3, Stroke: Color3, T
 	return Label, Scale, Outline
 end
 
+function CompleteController:Headline(Text: string, Top: Color3, Bottom: Color3, Stroke: Color3, Parent: GuiObject): TextLabel
+	local Title, Scale, Outline = self:Label("Title", TextColor, Stroke, TitleThickness)
+	Title.AnchorPoint = Vector2.new(0.5, 0.5)
+	Title.Rotation = SlamTilt
+	Title.TextTransparency = 1
+	Title.Parent = Parent
+	Translation.Set(Title, Text)
+	Scale.Scale = SlamScale
+	Outline.Transparency = 1
+
+	local Gradient = Instance.new("UIGradient")
+	Gradient.Color = ColorSequence.new(Top, Bottom)
+	Gradient.Rotation = 90
+	Gradient.Parent = Title
+
+	TweenService:Create(Title, AppearInfo, { TextTransparency = 0 }):Play()
+	TweenService:Create(Outline, AppearInfo, { Transparency = 0 }):Play()
+	TweenService:Create(Title, SlamInfo, { Rotation = 0 }):Play()
+	local Slam = TweenService:Create(Scale, SlamInfo, { Scale = 1 })
+	Slam.Completed:Once(function()
+		TweenService:Create(Scale, PulseInfo, { Scale = PulseScale }):Play()
+	end)
+	Slam:Play()
+	return Title
+end
+
+function CompleteController:Checkpoint()
+	local Holder = Instance.new("Frame")
+	Holder.Name = "Checkpoint"
+	Holder.AnchorPoint = Vector2.new(0.5, 0.5)
+	Holder.Position = UDim2.fromScale(0.5, CheckpointY)
+	Holder.Size = UDim2.fromScale(1, CheckpointHeight)
+	Holder.BackgroundTransparency = 1
+	Holder.Parent = self.gui
+
+	local Title = self:Headline("Checkpoint!", CheckpointTop, CheckpointBottom, CheckpointStroke, Holder)
+	Title.Position = UDim2.fromScale(0.5, 0.5)
+	Title.Size = UDim2.fromScale(1, 1)
+
+	task.delay(CheckpointHold, function()
+		Fade(Holder)
+		task.wait(FadeInfo.Time)
+		Holder:Destroy()
+	end)
+end
+
 function CompleteController:Line(Name: string, Color: Color3, Stroke: Color3, Order: number, Parent: Frame): (TextLabel, UIScale)
 	local Label, Scale = self:Label(Name, Color, Stroke, InfoThickness)
 	Label.LayoutOrder = Order
@@ -129,21 +181,9 @@ function CompleteController:Show(Time: number, Record: boolean)
 	})
 	Edges.Parent = Band
 
-	local Title, TitleScale, TitleOutline = self:Label("Title", TextColor, TitleStroke, TitleThickness)
-	Title.AnchorPoint = Vector2.new(0.5, 0.5)
+	local Title = self:Headline("FINISH!", TitleTop, TitleBottom, TitleStroke, Banner)
 	Title.Position = UDim2.fromScale(0.5, TitleHeight / 2)
 	Title.Size = UDim2.fromScale(1, TitleHeight)
-	Title.Rotation = SlamTilt
-	Title.TextTransparency = 1
-	Title.Parent = Banner
-	Translation.Set(Title, "FINISH!")
-	TitleScale.Scale = SlamScale
-	TitleOutline.Transparency = 1
-
-	local Gold = Instance.new("UIGradient")
-	Gold.Color = ColorSequence.new(TitleTop, TitleBottom)
-	Gold.Rotation = 90
-	Gold.Parent = Title
 
 	local Info = Instance.new("Frame")
 	Info.Name = "Info"
@@ -173,14 +213,6 @@ function CompleteController:Show(Time: number, Record: boolean)
 	Sfx.Play(Sounds.Complete.Fanfare, FanfareVolume)
 	Confetti.Burst(ConfettiStyle)
 	TweenService:Create(Band, BandInfo, { Size = UDim2.fromScale(1, 1) }):Play()
-	TweenService:Create(Title, AppearInfo, { TextTransparency = 0 }):Play()
-	TweenService:Create(TitleOutline, AppearInfo, { Transparency = 0 }):Play()
-	TweenService:Create(Title, SlamInfo, { Rotation = 0 }):Play()
-	local Slam = TweenService:Create(TitleScale, SlamInfo, { Scale = 1 })
-	Slam.Completed:Once(function()
-		TweenService:Create(TitleScale, PulseInfo, { Scale = PulseScale }):Play()
-	end)
-	Slam:Play()
 
 	task.delay(HoldTime, function()
 		Fade(Banner)
@@ -208,6 +240,10 @@ function CompleteController:Init()
 	Remotemanager:OnClientEvent("GliderService", "Completed", function(Time, Record)
 		Core:GetController("TransitionController"):Wait()
 		self:Show(Time, Record)
+	end)
+	Remotemanager:OnClientEvent("GliderService", "Checkpoint", function()
+		Core:GetController("TransitionController"):Wait()
+		self:Checkpoint()
 	end)
 end
 

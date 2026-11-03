@@ -29,6 +29,11 @@ local Sounds: { [string]: { [string]: string } } = {
 	},
 	Music = {
 		Main = "rbxassetid://83866396320328",
+		Moonlight = "rbxassetid://138980610882909",
+		Elevator = "rbxassetid://1841647093",
+		Morning = "rbxassetid://1846088038",
+		Adventure = "rbxassetid://9047876673",
+		Vibes = "rbxassetid://1840684529",
 	},
 	Studs = {
 		Gain = "rbxassetid://127645268874265",
@@ -39,6 +44,12 @@ local Sounds: { [string]: { [string]: string } } = {
 		Open = "rbxassetid://9120881979",
 		Tick = "rbxassetid://15675032796",
 		Duplicate = "rbxassetid://17208389987",
+	},
+	Debris = {
+		Rain = "rbxassetid://9113218410",
+	},
+	Inventory = {
+		Obtained = "rbxassetid://17208380755",
 	},
 	Wheel = {
 		Tick = "rbxassetid://15675032796",

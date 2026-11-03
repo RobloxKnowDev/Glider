@@ -18,6 +18,7 @@ local InventoryService = {
 		Unequip = "Event",
 		Buy = "Event",
 		Updated = "Event",
+		Obtained = "Event",
 	},
 }
 
@@ -122,6 +123,12 @@ function InventoryService:Give(Player: Player, Category: string, Name: string): 
 	return true
 end
 
+function InventoryService:Unlock(Player: Player, Category: string, Name: string)
+	if self:Give(Player, Category, Name) then
+		Remotemanager:FireClient(self.Name, "Obtained", Player, Category, Name)
+	end
+end
+
 function InventoryService:Take(Player: Player, Category: string, Name: string): boolean
 	local Inventory = self:EnsurePlayer(Player)[Category]
 	if not Inventory.Owned[Name] or Name == Catalogs[Category].Default then
@@ -160,7 +167,7 @@ function InventoryService:Buy(Player: Player, Category: any, Name: any)
 		return
 	end
 	if Id == 0 then
-		self:Give(Player, Category, Name)
+		self:Unlock(Player, Category, Name)
 	else
 		MarketplaceService:PromptGamePassPurchase(Player, Id)
 	end
@@ -170,7 +177,7 @@ function InventoryService:Grant(Player: Player, Id: number)
 	for Category, Passes in pairs(Gamepasses) do
 		for Name, Pass in pairs(Passes) do
 			if Pass == Id then
-				self:Give(Player, Category, Name)
+				self:Unlock(Player, Category, Name)
 			end
 		end
 	end

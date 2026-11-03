@@ -13,12 +13,27 @@ local MusicController = {
 	Priority = 32,
 }
 
-local MusicVolume = 0.3
+local Playlist = {
+	{ Name = "Main", Volume = 0.3 },
+	{ Name = "Moonlight", Volume = 0.47 },
+	{ Name = "Elevator", Volume = 0.34 },
+	{ Name = "Morning", Volume = 0.75 },
+	{ Name = "Adventure", Volume = 0.31 },
+	{ Name = "Vibes", Volume = 0.63 },
+}
 
 function MusicController:Set(Enabled: boolean)
 	self.enabled = Enabled
 	self.music.Playing = Enabled
 	self.button:setImage(if Enabled then Images.Music.On else Images.Music.Off)
+end
+
+function MusicController:Load(Index: number)
+	local Track = Playlist[Index]
+	self.index = Index
+	self.music.SoundId = Sounds.Music[Track.Name]
+	self.music.Volume = Track.Volume
+	self.music.TimePosition = 0
 end
 
 function MusicController:Init()
@@ -28,13 +43,15 @@ function MusicController:Init()
 
 	local Music = Instance.new("Sound")
 	Music.Name = "Music"
-	Music.SoundId = Sounds.Music.Main
-	Music.Volume = MusicVolume
-	Music.Looped = true
 	Music.SoundGroup = Group
 	Music.Parent = SoundService
+	Music.Ended:Connect(function()
+		self:Load(self.index % #Playlist + 1)
+		Music:Play()
+	end)
 	self.music = Music
 	self.enabled = true
+	self:Load(1)
 
 	self.button = Icon.new()
 		:setName("Music")

@@ -49,12 +49,13 @@ local ReturnDelay = 2.5
 local ReturnResponse = 3
 local CrashDistance = 18
 local CrashResponse = 4
+local BodyGrace = 1
 local RingFieldOfView = 10
 local KickInfo = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local SettleInfo = TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
 
 local LaunchVolume = 1.5
-local WindVolume = 0.35
+local WindVolume = 0.5
 local WindMin = 0.8
 local WindMax = 1.4
 local GustVolume = 0.6
@@ -123,6 +124,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	Camera.CameraType = Enum.CameraType.Scriptable
 
 	local Position = Start.Position
+	local Settle = os.clock() + BodyGrace
 	local _, Yaw = Start:ToOrientation()
 	local Bank = 0
 	local Climb = -SinkSpeed
@@ -303,8 +305,9 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		Near.FilterDescendantsInstances = Ghosts
 		local Bodies: { Model } = { Glider }
 		local Shapes = table.clone(Hull)
+		local Settled = os.clock() >= Settle
 		for _, Rider in ipairs(Crew) do
-			if Rider.Character and Rider.Weld.Parent then
+			if Settled and Rider.Character and Rider.Weld.Parent then
 				table.insert(Bodies, Rider.Character)
 				for _, Part in ipairs(Rider.Character:GetChildren()) do
 					if Part:IsA("BasePart") and Part.Transparency < 1 then

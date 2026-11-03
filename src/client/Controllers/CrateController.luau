@@ -14,6 +14,7 @@ local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local CrateRoll = require(ReplicatedStorage.Shared.Utils.CrateRoll)
+local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
 local NumberAbbreviator = require(ReplicatedStorage.Shared.Utils.NumberAbbreviator)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
@@ -44,6 +45,7 @@ type Spin = {
 	Duration: number,
 	Start: number,
 	Finish: number,
+	Refund: number,
 }
 
 type Style = {
@@ -68,6 +70,18 @@ local CloseMargin = 4
 local White = Color3.new(1, 1, 1)
 local Black = Color3.new(0, 0, 0)
 local Robux = "\u{E002}"
+local NoticeStyle: GainBurst.Style = {
+	Color = White,
+	Stroke = Black,
+}
+local Obtained = {
+	Gliders = "{1} Glider obtained!",
+	Trails = "{1} Trail obtained!",
+}
+local Owned = {
+	Gliders = "{1} Glider already owned!",
+	Trails = "{1} Trail already owned!",
+}
 local LockedStyle: Style = {
 	Background = Color3.fromRGB(110, 110, 110),
 	Stroke = Color3.fromRGB(150, 150, 150),
@@ -182,11 +196,23 @@ function CrateController:Tick()
 	end
 end
 
-function CrateController:Settle()
-	if self.refund > 0 then
-		Core:GetController("StudsController"):Credit(self.refund)
-		self.refund = 0
+function CrateController:Deliver(Category: string, Name: string, Refund: number)
+	local Entry: Entry = self.entries[Category][Name]
+	Sfx.Play(Sounds.Reveal[Entry.Rarity], RevealVolume[Entry.Rarity])
+	if Refund > 0 then
+		Sfx.Play(Sounds.Crate.Duplicate, DuplicateVolume)
+		Core:GetController("StudsController"):Credit(Refund)
 	end
+	local Image = if Category == "Trails" then Images.Trail[Name] else nil
+	local Pattern = if Refund > 0 then Owned[Category] else Obtained[Category]
+	GainBurst.Notice(Image, NoticeStyle, Pattern, Translation.Format(Name))
+end
+
+function CrateController:Later(Category: string, Name: string, Refund: number, Delay: number)
+	task.delay(Delay, function()
+		Core:GetController("TransitionController"):Wait()
+		self:Deliver(Category, Name, Refund)
+	end)
 end
 
 function CrateController:Show(Prompt: ProximityPrompt)
@@ -232,7 +258,10 @@ function CrateController:Show(Prompt: ProximityPrompt)
 end
 
 function CrateController:Reset()
-	self:Settle()
+	local Spin: Spin? = self.spin
+	if Spin then
+		self:Later(self.prize.Category, self.prize.Name, Spin.Refund, Spin.Began + Spin.Duration - os.clock())
+	end
 	self.crate = nil
 	self.spin = nil
 	for Index, Card in pairs(self.cards) do
@@ -265,9 +294,8 @@ function CrateController:Refuse()
 end
 
 function CrateController:Roll(Crate: string, Category: string, Name: string, Refund: number, SpinTime: number)
-	self.refund += Refund
 	if self.crate ~= Crate then
-		self:Settle()
+		self:Later(Category, Name, Refund, SpinTime)
 		return
 	end
 	for _, Reward in ipairs(self.contents) do
@@ -285,19 +313,15 @@ function CrateController:Roll(Crate: string, Category: string, Name: string, Ref
 		Duration = SpinTime,
 		Start = self.travel,
 		Finish = self.win + self.generator:NextNumber(-Landing, Landing),
+		Refund = Refund,
 	}
 	self.spin = Spin
 end
 
-function CrateController:Reveal()
+function CrateController:Reveal(Spin: Spin)
 	self.spin = nil
 	self.revealed = os.clock() + RevealTime
-	local Entry: Entry = self.entries[self.prize.Category][self.prize.Name]
-	Sfx.Play(Sounds.Reveal[Entry.Rarity], RevealVolume[Entry.Rarity])
-	if self.refund > 0 then
-		Sfx.Play(Sounds.Crate.Duplicate, DuplicateVolume)
-	end
-	self:Settle()
+	self:Deliver(self.prize.Category, self.prize.Name, Spin.Refund)
 end
 
 function CrateController:Update(Dt: number)
@@ -326,7 +350,7 @@ function CrateController:Update(Dt: number)
 			self:Tick()
 		end
 		if Alpha >= 1 then
-			self:Reveal()
+			self:Reveal(Spin)
 		end
 	elseif Now < self.revealed then
 		self.travel += (self.win - self.travel) * (1 - math.exp(-SnapResponse * Dt))
@@ -366,7 +390,6 @@ function CrateController:Init()
 	self.generator = Random.new()
 	self.cards = {} :: { [number]: Card }
 	self.arrows = {} :: { UIScale }
-	self.refund = 0
 	self.offers = {}
 	for _, Pack in ipairs(Store.Crate) do
 		self.offers[Pack.Name] = Pack

@@ -14,6 +14,7 @@ local LevelService = {
 }
 
 local Levels: { [Player]: number } = {}
+local Checkpoints = { 3, 6, 8 }
 
 function LevelService:Get(Player: Player): number
 	return Levels[Player] or 1
@@ -22,6 +23,7 @@ end
 function LevelService:Reach(Player: Player, Level: number)
 	if Level == self:Get(Player) + 1 then
 		Levels[Player] = Level
+		Core:GetService("FunnelService"):Pass(Player, Level - 1)
 	end
 end
 
@@ -29,6 +31,20 @@ function LevelService:Reset(Player: Player)
 	Levels[Player] = 1
 	Core:GetService("RecordService"):Reset(Player)
 	Remotemanager:FireClient(self.Name, "Reset", Player)
+end
+
+function LevelService:Checkpoint(Level: number): number
+	local Start = 1
+	for _, Finish in ipairs(Checkpoints) do
+		if Level > Finish then
+			Start = Finish + 1
+		end
+	end
+	return Start
+end
+
+function LevelService:Fall(Player: Player)
+	Levels[Player] = self:Checkpoint(self:Get(Player))
 end
 
 function LevelService:Set(Player: Player, Level: number)
@@ -64,6 +80,7 @@ end
 
 function LevelService:Track(Player: Player)
 	local function Spawn(Character: Model)
+		self:Fall(Player)
 		Character:WaitForChild("HumanoidRootPart")
 		task.wait()
 		self:Land(Character, 0)

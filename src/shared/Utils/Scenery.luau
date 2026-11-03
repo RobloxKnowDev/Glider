@@ -36,6 +36,11 @@ local IceGoneTime = 1
 local TurnSpeed = math.rad(45)
 local BobHeight = 0.3
 local BobSpeed = 2
+local RainTime = 6
+local CalmTime = 4
+local DebrisGravity = 60
+local DebrisPopTime = 0.2
+local DebrisSpin = math.rad(240)
 
 export type Piece = {
 	Part: BasePart,
@@ -65,10 +70,23 @@ type Lane = {
 	Spot: Vector3,
 }
 
+type Shower = {
+	Fall: number,
+	Cycle: number,
+	Offset: number,
+	Drops: number,
+	Drop: number,
+	Spot: Vector3,
+	Axis: Vector3,
+	Angle: number,
+	Spin: number,
+}
+
 local Scenery = {}
 
 local Plans: { [number]: Plan } = {}
 local Lanes: { [number]: Lane } = {}
+local Showers: { [number]: Shower } = {}
 
 function Scenery.Read(Part: BasePart): Piece
 	local Hinge: CFrame = Part:GetAttribute("Hinge")
@@ -217,10 +235,73 @@ function Scenery.Strikes(Piece: Piece, Time: number): number
 	return (Beat(Piece, Time, Cycle) - (IceGrowTime + IceHangTime + IceShakeTime + Fall) / Cycle) // 1
 end
 
+local function Gather(Piece: Piece): Shower
+	local Current = Showers[Piece.Phase]
+	if not Current then
+		local Fall = math.sqrt(2 * (Piece.Drop :: number) / DebrisGravity)
+		local Offset = Random.new(Piece.Phase):NextNumber() * Fall
+		Current = {
+			Fall = Fall,
+			Cycle = RainTime + Fall + CalmTime,
+			Offset = Offset,
+			Drops = math.max(math.ceil((RainTime - Offset) / Fall), 0),
+			Drop = -1,
+			Spot = Vector3.zero,
+			Axis = Vector3.yAxis,
+			Angle = 0,
+			Spin = 0,
+		}
+		Showers[Piece.Phase] = Current
+	end
+	return Current
+end
+
+local function Toss(Piece: Piece, Drop: number): (Vector3, Vector3, number, number)
+	local Extent = Piece.Extent :: Vector3
+	local Reach = (Extent / 2 - Vector3.one * Piece.Size.Magnitude / 2):Max(Vector3.zero)
+	local Roll = Random.new(Drop * (Piece.Count :: number) + Piece.Phase)
+	local Spot = Vector3.new(Roll:NextNumber(-Reach.X, Reach.X), Extent.Y / 2, Roll:NextNumber(-Reach.Z, Reach.Z))
+	return Spot, Roll:NextUnitVector(), Roll:NextNumber(0, 2 * math.pi), Roll:NextNumber(-DebrisSpin, DebrisSpin)
+end
+
+local function Downpour(Piece: Piece, Time: number): (Shower, number?)
+	local Shower = Gather(Piece)
+	local Round = Time // Shower.Cycle
+	local Clock = Time - Round * Shower.Cycle - Shower.Offset
+	local Index = Clock // Shower.Fall
+	if Clock < 0 or Index >= Shower.Drops then
+		return Shower, nil
+	end
+	local Drop = Round * Shower.Drops + Index
+	if Shower.Drop ~= Drop then
+		Shower.Drop = Drop
+		Shower.Spot, Shower.Axis, Shower.Angle, Shower.Spin = Toss(Piece, Drop)
+	end
+	return Shower, Clock - Index * Shower.Fall
+end
+
+function Scenery.Landed(Piece: Piece, Time: number): number
+	local Shower = Gather(Piece)
+	local Round = Time // Shower.Cycle
+	local Clock = Time - Round * Shower.Cycle - Shower.Offset
+	return Round * Shower.Drops + math.clamp(Clock // Shower.Fall, 0, Shower.Drops)
+end
+
+function Scenery.Impact(Piece: Piece, Drop: number): Vector3
+	local Spot = Toss(Piece, Drop)
+	return Piece.Hinge:PointToWorldSpace(Spot) - Vector3.yAxis * (Piece.Drop :: number)
+end
+
 function Scenery.Scale(Piece: Piece, Time: number): number
 	if Piece.Motion == "Fall" then
 		local _, _, Scale = Icicle(Piece, Time)
 		return Scale
+	elseif Piece.Motion == "Rain" then
+		local _, Elapsed = Downpour(Piece, Time)
+		if not Elapsed then
+			return 0
+		end
+		return TweenService:GetValue(math.min(Elapsed / DebrisPopTime, 1), PopStyle, Enum.EasingDirection.Out)
 	elseif Piece.Motion ~= "Fly" and Piece.Motion ~= "Flap" then
 		return 1
 	end
@@ -249,6 +330,14 @@ function Scenery.Pose(Piece: Piece, Time: number, Altitude: number?): CFrame
 	elseif Piece.Motion == "Fall" then
 		local Frame, Center, Scale = Icicle(Piece, Time)
 		return Piece.Hinge * Frame * Shrink(Piece.Local, Center, Scale)
+	elseif Piece.Motion == "Rain" then
+		local Shower, Elapsed = Downpour(Piece, Time)
+		if not Elapsed then
+			return Piece.Hinge * CFrame.new(0, (Piece.Extent :: Vector3).Y / 2, 0)
+		end
+		local Fallen = DebrisGravity * Elapsed * Elapsed / 2
+		return CFrame.new(Piece.Hinge:PointToWorldSpace(Shower.Spot) - Vector3.yAxis * Fallen)
+			* CFrame.fromAxisAngle(Shower.Axis, Shower.Angle + Shower.Spin * Elapsed)
 	elseif Piece.Motion == "Turn" then
 		local Angle = (Time * TurnSpeed) % (2 * math.pi)
 		local Height = BobHeight * math.sin(Time * BobSpeed + 2 * math.pi * (Piece.Phase - 1) / (Piece.Count :: number))

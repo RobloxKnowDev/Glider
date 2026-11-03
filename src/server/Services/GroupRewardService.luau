@@ -10,6 +10,7 @@ local GroupRewardService = {
 	Priority = 17,
 	Remotes = {
 		Claim = "Function",
+		Status = "Function",
 	},
 }
 
@@ -74,6 +75,9 @@ function GroupRewardService:Init()
 
 	Remotemanager:OnServerInvoke(self.Name, "Claim", function(Player)
 		return self:Claim(Player)
+	end)
+	Remotemanager:OnServerInvoke(self.Name, "Status", function(Player)
+		return GroupId, Member(Player)
 	end)
 end
 

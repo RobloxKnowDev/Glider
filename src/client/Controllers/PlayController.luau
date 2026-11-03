@@ -223,10 +223,12 @@ function PlayController:Init()
 	end
 	PlayButton.Activated:Connect(function()
 		if self.role == "Owner" then
+			Remotemanager:FireServer("FunnelService", "Play")
 			Remotemanager:FireServer("DuoService", "Start")
 		elseif self.role == "Member" then
 			Remotemanager:FireServer("DuoService", "Leave")
 		else
+			Remotemanager:FireServer("FunnelService", "Play")
 			Ui:Toggle(MainFrame)
 		end
 	end)

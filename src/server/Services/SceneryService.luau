@@ -13,6 +13,25 @@ local PhaseSpread = 0.05
 local BirdsPerZone = 4
 local FallReach = 2000
 local Flat = Vector3.new(1, 0, 1)
+local DebrisPerZone = 20
+local DebrisMin = 2
+local DebrisMax = 10
+local DebrisRatio = 0.3
+local DebrisColor = Color3.fromRGB(81, 83, 91)
+local DebrisMaterial = Enum.Material.Slate
+
+local function Ground(Folder: Instance): RaycastParams
+	local Params = RaycastParams.new()
+	Params.FilterType = Enum.RaycastFilterType.Exclude
+	Params.FilterDescendantsInstances = {
+		Folder,
+		Workspace:WaitForChild("RingsFolder"),
+		Workspace:WaitForChild("Windzones"),
+		Workspace:WaitForChild("WindTurbineZones"),
+	}
+	Params.RespectCanCollide = true
+	return Params
+end
 
 local function Span(Box: CFrame, Size: Vector3, Direction: Vector3): number
 	return math.abs(Direction:Dot(Box.RightVector)) * Size.X
@@ -150,33 +169,68 @@ function SceneryService:Rise(Folder: Instance)
 end
 
 function SceneryService:Drop(Folder: Instance)
-	local Ground = RaycastParams.new()
-	Ground.FilterType = Enum.RaycastFilterType.Exclude
-	Ground.FilterDescendantsInstances = {
-		Folder,
-		Workspace:WaitForChild("RingsFolder"),
-		Workspace:WaitForChild("Windzones"),
-		Workspace:WaitForChild("WindTurbineZones"),
-	}
-	Ground.RespectCanCollide = true
+	local Floor = Ground(Folder)
 	local Icicles = Folder:GetChildren()
 	for Index, Child in ipairs(Icicles) do
 		local Box, Size = (Child :: Model):GetBoundingBox()
 		local Length = Span(Box, Size, Vector3.yAxis)
 		local Top = Box.Position + Vector3.yAxis * Length / 2
 		local Tip = Top - Vector3.yAxis * Length
-		local Floor = Workspace:Raycast(Tip, -Vector3.yAxis * FallReach, Ground) :: RaycastResult
+		local Hit = Workspace:Raycast(Tip, -Vector3.yAxis * FallReach, Floor) :: RaycastResult
 		for _, Part in ipairs(Child:GetDescendants()) do
 			if Part:IsA("JointInstance") or Part:IsA("WeldConstraint") then
 				Part:Destroy()
 			elseif Part:IsA("BasePart") then
 				Part.Anchored = true
 				Part.CanCollide = true
-				Part:SetAttribute("Drop", Tip.Y - Floor.Position.Y)
+				Part:SetAttribute("Drop", Tip.Y - Hit.Position.Y)
 				Part:SetAttribute("Length", Length)
 				Scenery.Mark(Part, "Fall", CFrame.new(Top), Vector3.zero, Index, #Icicles)
 			end
 		end
+	end
+end
+
+function SceneryService:Rain(Folder: Instance)
+	local Floor = Ground(Folder)
+	local Roll = Random.new()
+	local Zones = Folder:GetChildren()
+	local Count = #Zones * DebrisPerZone
+	local Index = 0
+	for _, Child in ipairs(Zones) do
+		local Zone = Child :: BasePart
+		Zone.Transparency = 1
+		Zone.CanCollide = false
+		Zone.CanQuery = false
+		Zone.CanTouch = false
+		local Top = Zone.Position.Y + Zone.Size.Y / 2
+		local Bottom = Zone.Position - Vector3.yAxis * Zone.Size.Y / 2
+		local Hit = Workspace:Raycast(Bottom, -Vector3.yAxis * FallReach, Floor) :: RaycastResult
+
+		local Debris = Instance.new("Model")
+		Debris.Name = "Debris"
+		Debris.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+		for _ = 1, DebrisPerZone do
+			Index += 1
+			local Rock = Instance.new("Part")
+			Rock.Name = "Rock"
+			Rock.Size = Roll:NextNumber(DebrisMin, DebrisMax)
+				* Vector3.new(
+					Roll:NextNumber(1 - DebrisRatio, 1 + DebrisRatio),
+					Roll:NextNumber(1 - DebrisRatio, 1 + DebrisRatio),
+					Roll:NextNumber(1 - DebrisRatio, 1 + DebrisRatio)
+				)
+			Rock.Color = DebrisColor
+			Rock.Material = DebrisMaterial
+			Rock.Anchored = true
+			Rock.CanTouch = false
+			Rock.CFrame = Zone.CFrame
+			Rock:SetAttribute("Extent", Zone.Size)
+			Rock:SetAttribute("Drop", Top - Hit.Position.Y)
+			Scenery.Mark(Rock, "Rain", Zone.CFrame, Vector3.zero, Index, Count)
+			Rock.Parent = Debris
+		end
+		Debris.Parent = Folder
 	end
 end
 
@@ -203,6 +257,7 @@ function SceneryService:Start()
 	self:Swing(Workspace:WaitForChild("AnimatedLog") :: Model)
 	self:Rise(Workspace:WaitForChild("SpikesModels"))
 	self:Drop(Workspace:WaitForChild("GlaceModels"))
+	self:Rain(Workspace:WaitForChild("SpawnDebriesZone"))
 	self:Flock(Workspace:WaitForChild("BirdsZones"))
 	self:Whirl(Workspace:WaitForChild("TornadoZone"))
 	self:Turn(Workspace:WaitForChild("RotatingGliders"))

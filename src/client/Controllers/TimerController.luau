@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
@@ -27,9 +28,11 @@ type Run = {
 local Player = Players.LocalPlayer
 local Flat = Vector3.new(1, 0, 1)
 local TopMargin = 8
+local TouchLift = 30
 local Width = 0.4
 local MinWidth = 260
 local MaxWidth = 520
+local ReferenceHeight = 720
 local TimerHeight = 32
 local TrackTop = 46
 local TrackHeight = 12
@@ -100,7 +103,7 @@ function TimerController:Segment(Index: number, Count: number): (Frame, Frame)
 	return Segment, Fill
 end
 
-function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: Vector3 } })
+function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: Vector3, Section: number } })
 	local Glider = Workspace:WaitForChild("Gliders"):WaitForChild(Name)
 	local Bar = Glider:WaitForChild("Bar") :: BasePart
 	local Seats = Glider:WaitForChild("Riders")
@@ -114,7 +117,16 @@ function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: 
 		table.insert(Markers, self:Marker(Weld.Name))
 	end
 
-	local Count = #Route
+	local Count = Route[#Route].Section
+	local First: { number } = {}
+	local Size: { number } = {}
+	for Index, Stage in ipairs(Route) do
+		if not First[Stage.Section] then
+			First[Stage.Section] = Index
+			Size[Stage.Section] = 0
+		end
+		Size[Stage.Section] += 1
+	end
 	local Segments: { Frame } = {}
 	local Fills: { Frame } = {}
 	for Index = 1, Count do
@@ -142,13 +154,15 @@ function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: 
 				1
 			)
 		)
+		local Section = Stage.Section
+		local Progress = (Level - First[Section] + Best) / Size[Section]
 		for Index, Fill in ipairs(Fills) do
-			Fill.Size = UDim2.fromScale(if Index < Level then 1 elseif Index == Level then Best else 0, 1)
+			Fill.Size = UDim2.fromScale(if Index < Section then 1 elseif Index == Section then Progress else 0, 1)
 		end
 		for Index, Marker in ipairs(Markers) do
 			Marker.Position = UDim2.new(
-				(Level - 1 + Best) / Count,
-				SegmentGap * (0.5 - Best) + (Index - (#Markers + 1) / 2) * MarkerSpacing,
+				(Section - 1 + Progress) / Count,
+				SegmentGap * (0.5 - Progress) + (Index - (#Markers + 1) / 2) * MarkerSpacing,
 				0.5,
 				0
 			)
@@ -252,8 +266,6 @@ function TimerController:Init()
 	local Top = Instance.new("Frame")
 	Top.Name = "Top"
 	Top.AnchorPoint = Vector2.new(0.5, 0)
-	Top.Position = UDim2.new(0.5, 0, 0, TopMargin)
-	Top.Size = UDim2.new(Width, 0, 0, TrackTop + TrackHeight)
 	Top.BackgroundTransparency = 1
 	Top.Parent = Gui
 
@@ -261,6 +273,20 @@ function TimerController:Init()
 	Limit.MinSize = Vector2.new(MinWidth, 0)
 	Limit.MaxSize = Vector2.new(MaxWidth, math.huge)
 	Limit.Parent = Top
+
+	local Scale = Instance.new("UIScale")
+	Scale.Parent = Top
+	local Camera = Workspace.CurrentCamera
+	local function Fit()
+		local Ratio = math.min(Camera.ViewportSize.Y / ReferenceHeight, 1)
+		local Lift = if UserInputService.PreferredInput == Enum.PreferredInput.Touch then TouchLift else 0
+		Scale.Scale = Ratio
+		Top.Position = UDim2.new(0.5, 0, 0, TopMargin - Lift)
+		Top.Size = UDim2.new(Width / Ratio, 0, 0, TrackTop + TrackHeight)
+	end
+	Fit()
+	Camera:GetPropertyChangedSignal("ViewportSize"):Connect(Fit)
+	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(Fit)
 
 	local Timer = Instance.new("TextLabel")
 	Timer.Name = "Timer"

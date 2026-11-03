@@ -12,6 +12,7 @@ local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Images = require(ReplicatedStorage.Shared.Config.Images)
 local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
+local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
@@ -66,6 +67,12 @@ type Spinner = {
 	Angle: number,
 }
 
+type Npc = {
+	Frame: GuiObject,
+	Origin: Vector3,
+	Reach: number,
+}
+
 local EquipStyle: Style = {
 	Background = Color3.fromRGB(46, 173, 0),
 	Stroke = Color3.fromRGB(61, 228, 0),
@@ -86,13 +93,25 @@ local BuyStyle: Style = {
 	Stroke = Color3.fromRGB(255, 215, 60),
 	TextStroke = Color3.fromRGB(125, 90, 0),
 }
+local Player = Players.LocalPlayer
 local Robux = "\u{E002}"
 local White = Color3.new(1, 1, 1)
+local Black = Color3.new(0, 0, 0)
 local LockTransparency = 0.6
 local LockZIndex = 10
 local SpinSpeed = math.rad(90)
 local SpinReturnResponse = 8
 local LockedVolume = 0.6
+local ObtainedVolume = 0.9
+local CloseMargin = 4
+local NoticeStyle: GainBurst.Style = {
+	Color = White,
+	Stroke = Black,
+}
+local Obtained = {
+	Gliders = "{1} Glider obtained!",
+	Trails = "{1} Trail obtained!",
+}
 
 local function Paint(Card: Card, Style: Style, Text: string)
 	Card.Button.BackgroundColor3 = Style.Background
@@ -266,11 +285,14 @@ function InventoryController:Page(Category: string, Catalog: Catalog, Gui: Insta
 	end)
 	Frame:GetPropertyChangedSignal("Visible"):Connect(function()
 		self.hovered = nil
+		if not Frame.Visible and self.npc and self.npc.Frame == Frame then
+			self.npc = nil
+		end
 	end)
 end
 
 function InventoryController:Init()
-	local PlayerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	local PlayerGui = Player:WaitForChild("PlayerGui")
 	local Left = PlayerGui:WaitForChild("HUD"):WaitForChild("Left")
 	self.models = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Glider")
 	self.cards = {}
@@ -278,6 +300,7 @@ function InventoryController:Init()
 	self.prompts = {} :: { [ProximityPrompt]: string }
 	self.frames = {} :: { [string]: GuiObject }
 	self.offers = {} :: { [string]: { [string]: Pack } }
+	self.npc = nil :: Npc?
 	local Display = Workspace:WaitForChild("RotatingGliders")
 
 	self:Page("Gliders", GlidersConfig, PlayerGui:WaitForChild("GliderUi"), Left:WaitForChild("GliderButton") :: GuiButton)
@@ -304,11 +327,22 @@ function InventoryController:Init()
 			self:Offer(Name)
 		elseif Category then
 			UiFade.Click()
-			Core:GetController("UiController"):Open(self.frames[Category])
+			local Frame = self.frames[Category]
+			self.npc = {
+				Frame = Frame,
+				Origin = (Prompt.Parent :: BasePart).Position,
+				Reach = Prompt.MaxActivationDistance + CloseMargin,
+			}
+			Core:GetController("UiController"):Open(Frame)
 		end
 	end)
 
 	RunService.RenderStepped:Connect(function(Dt)
+		local Npc = self.npc
+		local Character = Player.Character
+		if Npc and (not Character or (Character:GetPivot().Position - Npc.Origin).Magnitude > Npc.Reach) then
+			Core:GetController("UiController"):Close()
+		end
 		for _, Spinner in ipairs(self.spinners) do
 			if Spinner == self.hovered then
 				Spinner.Angle = (Spinner.Angle + SpinSpeed * Dt + math.pi) % (2 * math.pi) - math.pi
@@ -322,9 +356,23 @@ function InventoryController:Init()
 	end)
 end
 
+function InventoryController:Announce(Category: string, Name: string)
+	local Loading = Player:WaitForChild("PlayerGui"):FindFirstChild("LoadingUi")
+	if Loading and not Loading:GetAttribute("Ready") then
+		Loading:GetAttributeChangedSignal("Ready"):Wait()
+	end
+	Core:GetController("TransitionController"):Wait()
+	local Image = if Category == "Trails" then Images.Trail[Name] else nil
+	Sfx.Play(Sounds.Inventory.Obtained, ObtainedVolume)
+	GainBurst.Notice(Image, NoticeStyle, Obtained[Category], Translation.Format(Name))
+end
+
 function InventoryController:Start()
 	Remotemanager:OnClientEvent("InventoryService", "Updated", function(State)
 		self:Apply(State)
+	end)
+	Remotemanager:OnClientEvent("InventoryService", "Obtained", function(Category, Name)
+		task.spawn(self.Announce, self, Category, Name)
 	end)
 	task.spawn(function()
 		self:Apply(Remotemanager:InvokeServer("InventoryService", "GetState"))

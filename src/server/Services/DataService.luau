@@ -27,7 +27,7 @@ local Maximumpurchases = 100
 local Maximumsize = 4_000_000
 local Maximumdepth = 32
 local Shutdowndeadline = 27
-local Sectionorder = { "Settings", "Studs", "Gliders", "Trails", "Revives", "Skips", "Spins", "Passes", "Record", "DuoRecord", "Spent", "Group", "Wheel" }
+local Sectionorder = { "Settings", "Studs", "Gliders", "Trails", "Revives", "Skips", "Spins", "Passes", "Record", "DuoRecord", "Spent", "Group", "Wheel", "Playtime" }
 
 type Section = {
 	Load: (Player, any) -> (),
@@ -630,6 +630,37 @@ function Dataservice:Wipe(Userid: number): (boolean, string)
 		return false, tostring(Result)
 	end
 	return true, if Result == nil then "no save found" else "save erased"
+end
+
+function Dataservice:Edit(Userid: number, Change: ({ [string]: any }) -> any): (boolean, any)
+	local Outcome = "failed"
+	local Result = nil
+	local Success, Error = Datastorerequest.Run(Saveattempts, function()
+		Store:UpdateAsync(tostring(Userid), function(Value)
+			if type(Value) ~= "table" or not Hassections(Value) then
+				Outcome = "missing"
+				return nil
+			end
+			local Lock = Value._Session
+			if type(Lock) == "table" and os.time() - (tonumber(Lock.Time) or 0) < Lockexpiry then
+				Outcome = "locked"
+				return nil
+			end
+			Result = Change(Value)
+			Outcome = "written"
+			return Value, { Userid }
+		end)
+	end)
+	if not Success then
+		return false, tostring(Error)
+	end
+	if Outcome == "missing" then
+		return false, "no save found"
+	end
+	if Outcome == "locked" then
+		return false, "the player just joined a server, try again"
+	end
+	return true, Result
 end
 
 function Dataservice:ListVersions(Userid: number, Count: number): (boolean, any)

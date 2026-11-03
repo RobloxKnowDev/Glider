@@ -31,6 +31,7 @@ local GliderService = {
 		Ring = "Event",
 		Finished = "Event",
 		Completed = "Event",
+		Checkpoint = "Event",
 	},
 }
 
@@ -45,6 +46,8 @@ type Level = {
 	Spawn: BasePart,
 	Finish: BasePart,
 	Revives: { BasePart },
+	Reward: number,
+	Checkpoint: boolean,
 }
 
 type Rider = {
@@ -68,6 +71,7 @@ type Flight = {
 	Passing: boolean,
 	Pilot: Player,
 	Deciding: boolean,
+	Wrecked: boolean,
 	Deadline: number?,
 	Remaining: number,
 	Buyer: Player?,
@@ -88,6 +92,7 @@ local RiderGap = 3
 local RiderMargin = 1.5
 local SpawnSpacing = 4
 local FinishReward = 100
+local StepReward = 75
 
 local function Finite(Value: any): boolean
 	return type(Value) == "number" and Value == Value and math.abs(Value) ~= math.huge
@@ -214,6 +219,7 @@ function GliderService:Launch(Team: { Player })
 		Passing = false,
 		Pilot = Host,
 		Deciding = false,
+		Wrecked = false,
 		Deadline = nil,
 		Remaining = 0,
 		Buyer = nil,
@@ -291,6 +297,9 @@ function GliderService:Advance(Flight: Flight, Reward: number)
 		for Player in pairs(Flight.Riders) do
 			StudsService:Add(Player, Earning(Player, Reward))
 		end
+		if self.levels[Flight.Level].Checkpoint then
+			self:Announce(Flight)
+		end
 		Flight.Level = Next
 		Flight.Glider:SetAttribute("Level", Next)
 		return
@@ -313,6 +322,7 @@ function GliderService:Advance(Flight: Flight, Reward: number)
 		Core:GetService("LevelService"):Reset(Player)
 		StudsService:Push(Player, Gains[Player])
 		Remotemanager:FireClient(self.Name, "Completed", Player, Times[Player], Records[Player])
+		Core:GetService("FunnelService"):Log(Player, "Race Finished")
 	end
 end
 
@@ -345,6 +355,7 @@ function GliderService:Skip(Player: Player)
 	for Rider in pairs(Flight.Riders) do
 		Core:GetService("LevelService"):Reach(Rider, Flight.Level + 1)
 	end
+	local Passed = Flight.Level
 	Flight.Level += 1
 	Flight.Glider:SetAttribute("Level", Flight.Level)
 	Flight.Passing = true
@@ -355,6 +366,15 @@ function GliderService:Skip(Player: Player)
 	task.wait(LaunchDelay)
 	if Active[Flight] and not Flight.Crashed then
 		self:Relaunch(Flight, Facing(self.levels[Flight.Level].Spawn, 0))
+		if self.levels[Passed].Checkpoint then
+			self:Announce(Flight)
+		end
+	end
+end
+
+function GliderService:Announce(Flight: Flight)
+	for Player in pairs(Flight.Riders) do
+		Remotemanager:FireClient(self.Name, "Checkpoint", Player)
 	end
 end
 
@@ -438,6 +458,8 @@ function GliderService:Crash(Flight: Flight, Final: boolean)
 	if Flight.Crashed then
 		if Final and Flight.Deciding then
 			self:Respawn(Flight)
+		elseif Final then
+			Flight.Wrecked = true
 		end
 		return
 	end
@@ -542,8 +564,13 @@ function GliderService:Revive(Flight: Flight, Restart: boolean)
 	if not Active[Flight] then
 		return
 	end
+	if Flight.Wrecked then
+		self:Respawn(Flight)
+		return
+	end
 	if Restart then
 		Flight.Collected = {}
+		self:Fall(Flight)
 		self:Relaunch(Flight, Facing(self.levels[Flight.Level].Spawn, 0))
 	else
 		self:Relaunch(Flight, self:Nearest(Flight))
@@ -576,9 +603,19 @@ function GliderService:Relaunch(Flight: Flight, Start: CFrame)
 	end
 end
 
+function GliderService:Fall(Flight: Flight)
+	local LevelService = Core:GetService("LevelService")
+	for Player in pairs(Flight.Riders) do
+		LevelService:Fall(Player)
+	end
+	Flight.Level = LevelService:Checkpoint(Flight.Level)
+	Flight.Glider:SetAttribute("Level", Flight.Level)
+end
+
 function GliderService:Respawn(Flight: Flight)
 	Flight.Deciding = false
 	Flight.Buyer = nil
+	self:Fall(Flight)
 	for Player in pairs(Flight.Riders) do
 		Remotemanager:FireClient(self.Name, "Respawning", Player)
 	end
@@ -653,6 +690,7 @@ function GliderService:Init()
 	self.folder.Parent = Workspace
 
 	Remotemanager:OnServerEvent(self.Name, "Play", function(Player)
+		Core:GetService("FunnelService"):Log(Player, "Solo")
 		self:Launch({ Player })
 	end)
 	Remotemanager:OnServerEvent(self.Name, "Move", function(Player, Offset)
@@ -691,9 +729,12 @@ end
 
 function GliderService:Start()
 	local Folder = Workspace:WaitForChild("Level")
+	local LevelService = Core:GetService("LevelService")
+	local Count = #Folder:GetChildren()
+	local Section = 0
 	self.levels = {} :: { Level }
 	self.route = {}
-	for Index = 1, #Folder:GetChildren() do
+	for Index = 1, Count do
 		local Stage = Folder:WaitForChild(tostring(Index))
 		local Spawn = Stage:WaitForChild("SpawnPart") :: BasePart
 		Spawn.Anchored = true
@@ -713,8 +754,16 @@ function GliderService:Start()
 			Part.Transparency = 1
 			table.insert(Revives, Part)
 		end
-		table.insert(self.levels, { Spawn = Spawn, Finish = Finish, Revives = Revives })
-		table.insert(self.route, { Spawn = Spawn.Position, Finish = Finish.Position })
+		if LevelService:Checkpoint(Index) == Index then
+			Section += 1
+		end
+		local Checkpoint = Index < Count and LevelService:Checkpoint(Index + 1) == Index + 1
+		local Reward = if Checkpoint or Index == Count then FinishReward else StepReward
+		table.insert(
+			self.levels,
+			{ Spawn = Spawn, Finish = Finish, Revives = Revives, Reward = Reward, Checkpoint = Checkpoint }
+		)
+		table.insert(self.route, { Spawn = Spawn.Position, Finish = Finish.Position, Section = Section })
 	end
 	self.touch = OverlapParams.new()
 	self.touch.FilterType = Enum.RaycastFilterType.Include
@@ -736,7 +785,7 @@ function GliderService:Start()
 					for Player in pairs(Flight.Riders) do
 						Remotemanager:FireClient(self.Name, "Finished", Player)
 					end
-					task.spawn(self.Advance, self, Flight, FinishReward)
+					task.spawn(self.Advance, self, Flight, self.levels[Flight.Level].Reward)
 				end
 				continue
 			end

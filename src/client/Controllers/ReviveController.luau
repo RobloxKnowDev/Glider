@@ -117,7 +117,7 @@ function ReviveController:Init()
 			self:Show()
 		end
 	end)
-	for _, Event in ipairs({ "Launching", "Respawning", "Stopped" }) do
+	for _, Event in ipairs({ "Launching", "Revived", "Respawning", "Stopped" }) do
 		Remotemanager:OnClientEvent("GliderService", Event, function()
 			self:Hide()
 		end)

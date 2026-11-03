@@ -45,8 +45,10 @@ function LoadingController:Start()
 			end
 		end
 		for _, Group in pairs(Sounds) do
-			for _, Id in pairs(Group) do
-				AddSoundId(Essential, Id)
+			if Group ~= Sounds.Music then
+				for _, Id in pairs(Group) do
+					AddSoundId(Essential, Id)
+				end
 			end
 		end
 		local Loaded = false

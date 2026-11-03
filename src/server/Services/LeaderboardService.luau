@@ -1,5 +1,6 @@
 local DataStoreService = game:GetService("DataStoreService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserService = game:GetService("UserService")
@@ -66,20 +67,20 @@ local function Value(Key: string, Score: number): string
 	return Chrono(Score / 100)
 end
 
-function LeaderboardService:Write(Key: string, Player: Player, Value: number, Changed: boolean)
-	if Player.UserId <= 0 then
+function LeaderboardService:Write(Key: string, UserId: number, Value: number, Changed: boolean)
+	if UserId <= 0 then
 		return
 	end
 	task.spawn(function()
 		local Success, Error = Datastorerequest.Run(Attempts, function()
 			if Value > 0 then
-				Stores[Key]:SetAsync(tostring(Player.UserId), Value)
+				Stores[Key]:SetAsync(tostring(UserId), Value)
 			else
-				Stores[Key]:RemoveAsync(tostring(Player.UserId))
+				Stores[Key]:RemoveAsync(tostring(UserId))
 			end
 		end)
 		if not Success then
-			warn("LeaderboardService: could not save " .. Key .. " for " .. Player.Name .. ": " .. tostring(Error))
+			warn("LeaderboardService: could not save " .. Key .. " for " .. UserId .. ": " .. tostring(Error))
 		elseif Changed then
 			self:Request()
 		end
@@ -98,7 +99,7 @@ function LeaderboardService:Request()
 end
 
 function LeaderboardService:Post(Mode: string, Player: Player, Time: number, Changed: boolean)
-	self:Write(Mode, Player, math.round(Time * 100), Changed)
+	self:Write(Mode, Player.UserId, math.round(Time * 100), Changed)
 end
 
 function LeaderboardService:Spend(Player: Player, Amount: number)
@@ -106,12 +107,32 @@ function LeaderboardService:Spend(Player: Player, Amount: number)
 		return
 	end
 	Spent[Player] = (Spent[Player] or 0) + Amount
-	self:Write("Robux", Player, Spent[Player], true)
+	self:Write("Robux", Player.UserId, Spent[Player], true)
 end
 
 function LeaderboardService:Set(Player: Player, Amount: number)
 	Spent[Player] = Amount
-	self:Write("Robux", Player, Amount, true)
+	self:Write("Robux", Player.UserId, Amount, true)
+end
+
+function LeaderboardService:Erase(UserId: number): (boolean, string?)
+	local Player = Players:GetPlayerByUserId(UserId)
+	if Player then
+		Spent[Player] = nil
+	end
+	if UserId <= 0 then
+		return true, nil
+	end
+	for Key, Store in pairs(Stores) do
+		local Success, Error = Datastorerequest.Run(Attempts, function()
+			Store:RemoveAsync(tostring(UserId))
+		end)
+		if not Success then
+			return false, Key .. ": " .. tostring(Error)
+		end
+	end
+	self:Request()
+	return true, nil
 end
 
 function LeaderboardService:Fill(Board: Board, Page: { Entry }, Users: { [number]: any })
@@ -185,7 +206,7 @@ function LeaderboardService:Init()
 	Core:GetService("DataService"):Register("Spent", {
 		Load = function(Player, Saved)
 			Spent[Player] = Saved
-			self:Write("Robux", Player, Saved, false)
+			self:Write("Robux", Player.UserId, Saved, false)
 		end,
 		Save = function(Player)
 			return Spent[Player]

@@ -60,6 +60,7 @@ function CrateService:Roll(Player: Player, Name: string)
 		then 0
 		else math.floor(Crate.Price * DuplicateRefund)
 	Core:GetService("StudsService"):Credit(Player, Refund)
+	Core:GetService("FunnelService"):Log(Player, "Crate Opened")
 	Opening[Player] = true
 	Remotemanager:FireClient(self.Name, "Opened", Player, Name, Reward.Category, Reward.Name, Refund, SpinTime)
 	task.delay(SpinTime, function()
