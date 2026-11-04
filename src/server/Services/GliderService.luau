@@ -82,7 +82,10 @@ type Flight = {
 local Flights: { [Player]: Flight } = {}
 local Pending: { [Player]: boolean } = {}
 local Active: { [Flight]: boolean } = {}
-local Single = Store.Revive[1]
+local Ladder: { [number]: boolean } = {}
+for _, Pack in ipairs(Store.ReviveLadder) do
+	Ladder[Pack.Product] = true
+end
 local LaunchDelay = 0.7
 local RespawnTime = 2
 local VoidMargin = 60
@@ -186,6 +189,7 @@ function GliderService:Launch(Team: { Player })
 	local Limit = math.max(Bar.Size.X, Bar.Size.Y, Bar.Size.Z) / 2 - RiderMargin
 	Core:GetService("TrailService"):Attach(Bar, Frame, Inventory:GetEquipped(Host, "Trails"))
 	Glider:PivotTo(Start * Frame:Inverse() * Bar.CFrame:ToObjectSpace(Glider:GetPivot()))
+	Core:GetService("CollisionService"):Glider(Glider)
 	for _, Part in ipairs(Glider:GetDescendants()) do
 		if Part:IsA("BasePart") and Part ~= Bar then
 			local Joint = Instance.new("WeldConstraint")
@@ -529,12 +533,13 @@ function GliderService:UseRevive(Player: Player)
 	then
 		return
 	end
-	if Core:GetService("ReviveService"):Use(Player) then
+	local Revives = Core:GetService("ReviveService")
+	if Revives:Use(Player) then
 		self:Revive(Flight, false)
 	elseif not Flight.Buyer then
 		Flight.Buyer = Player
 		self:Pause(Flight)
-		Core:GetService("StoreService"):Buy(Player, "Revive", Single.Name)
+		Core:GetService("StoreService"):Buy(Player, "ReviveLadder", Revives:Offer(Player))
 	end
 end
 
@@ -542,6 +547,7 @@ function GliderService:Refilled(Player: Player)
 	local Flight = Flights[Player]
 	if Flight and Flight.Buyer == Player then
 		Flight.Buyer = nil
+		Core:GetService("ReviveService"):Climb(Player)
 		task.spawn(self.UseRevive, self, Player)
 	end
 end
@@ -714,7 +720,7 @@ function GliderService:Init()
 	MarketplaceService.PromptProductPurchaseFinished:Connect(function(UserId, Product, Purchased)
 		local Player = Players:GetPlayerByUserId(UserId)
 		local Flight = Player and Flights[Player]
-		if not Flight or Flight.Buyer ~= Player or Product ~= Single.Product then
+		if not Flight or Flight.Buyer ~= Player or not Ladder[Product] then
 			return
 		end
 		if not Purchased then

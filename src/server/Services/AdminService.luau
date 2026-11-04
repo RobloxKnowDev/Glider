@@ -223,18 +223,22 @@ local function Inspect(Account: Account): string
 		return Header .. "\nNo save"
 	end
 	local Passes = Sections.Passes or {}
+	local Today = Core:GetService("RecordService"):Today()
+	local Daily = if Sections.Daily and Sections.Daily.Day == Today then Sections.Daily else {}
 	local Lines = {
 		Header,
 		"Playtime: " .. FormatDuration(Sections.Playtime or 0),
 		"Cash: " .. NumberAbbreviator(Sections.Studs or 0) .. "$ | Robux spent: " .. NumberAbbreviator(Sections.Spent or 0),
-		"Best solo: " .. Best(Sections.Record) .. " | Best duo: " .. Best(Sections.DuoRecord),
-		"Revives: " .. (Sections.Revives or 0) .. " | Skips: " .. (Sections.Skips or 0) .. " | Spins: " .. (Sections.Spins or 0),
+		"Daily best solo: " .. Best(Daily.Solo) .. " | Daily best duo: " .. Best(Daily.Duo),
+		"All-time best solo: " .. Best(Sections.Record) .. " | All-time best duo: " .. Best(Sections.DuoRecord),
+		"Revives: " .. (Sections.Revives or 0) .. " (" .. (Sections.RevivesBought or 0) .. " bought after a crash) | Skips: " .. (Sections.Skips or 0) .. " | Spins: " .. (Sections.Spins or 0),
 	}
 	for _, Category in ipairs(Categories) do
 		table.insert(Lines, Holdings(Sections[Category], Category))
 	end
 	table.insert(Lines, "Packs: " .. (if #Passes > 0 then table.concat(Passes, ", ") else "none"))
 	table.insert(Lines, "Group reward: " .. (if Sections.Group then "claimed" else "not claimed"))
+	table.insert(Lines, "Tutorial: " .. (if Sections.Tutorial then "done" else "not done"))
 	if Account.Player then
 		table.insert(Lines, "Level: " .. Core:GetService("LevelService"):Get(Account.Player) .. " (this session)")
 	end

@@ -49,6 +49,7 @@ local function Collider(Part: BasePart): BasePart
 	Box.CanCollide = true
 	Box.CanQuery = false
 	Box.CanTouch = false
+	Box.CollisionGroup = "Ragdolls"
 	local Weld = Instance.new("WeldConstraint")
 	Weld.Part0 = Part
 	Weld.Part1 = Box

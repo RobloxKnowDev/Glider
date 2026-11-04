@@ -11,6 +11,12 @@ return {
 		{ Name = "BuyButton3", Revives = 3, Product = 3726797399, Price = 59 },
 		{ Name = "BuyButton10", Revives = 10, Product = 3726797467, Price = 179 },
 	},
+	ReviveLadder = {
+		{ Name = "Step1", Revives = 1, Product = 3728267462, Price = 9 },
+		{ Name = "Step2", Revives = 1, Product = 3728267341, Price = 17 },
+		{ Name = "Step3", Revives = 1, Product = 3728267169, Price = 22 },
+		{ Name = "Step4", Revives = 1, Product = 3726797282, Price = 29 },
+	},
 	Skip = {
 		{ Name = "BuyButton1", Skips = 1, Product = 3726797748, Price = 29 },
 		{ Name = "BuyButton3", Skips = 3, Product = 3726798154, Price = 69 },

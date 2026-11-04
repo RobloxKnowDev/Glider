@@ -6,11 +6,11 @@ local CollisionService = {
 	Priority = 3,
 }
 
-local Group = "Players"
+local Groups = { "Players", "Gliders", "Ragdolls" }
 
 local function Join(Part: Instance)
 	if Part:IsA("BasePart") then
-		Part.CollisionGroup = Group
+		Part.CollisionGroup = "Players"
 	end
 end
 
@@ -27,9 +27,23 @@ function CollisionService:Track(Player: Player)
 	end
 end
 
+function CollisionService:Glider(Glider: Model)
+	for _, Part in ipairs(Glider:GetDescendants()) do
+		if Part:IsA("BasePart") then
+			Part.CollisionGroup = "Gliders"
+		end
+	end
+end
+
 function CollisionService:Init()
-	PhysicsService:RegisterCollisionGroup(Group)
-	PhysicsService:CollisionGroupSetCollidable(Group, Group, false)
+	for _, Group in ipairs(Groups) do
+		PhysicsService:RegisterCollisionGroup(Group)
+	end
+	for _, First in ipairs(Groups) do
+		for _, Second in ipairs(Groups) do
+			PhysicsService:CollisionGroupSetCollidable(First, Second, false)
+		end
+	end
 
 	Players.PlayerAdded:Connect(function(Player)
 		self:Track(Player)

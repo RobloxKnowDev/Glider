@@ -30,6 +30,9 @@ local Images: { [string]: { [string]: string } } = {
 	Timer = {
 		Leave = "rbxassetid://130822903187331",
 	},
+	Tutorial = {
+		Hand = "rbxassetid://1013090763",
+	},
 }
 
 return Images

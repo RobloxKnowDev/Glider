@@ -21,8 +21,14 @@ local NoticeStyle: GainBurst.Style = {
 	Stroke = Color3.new(0, 0, 0),
 }
 
-local function Joined(GroupId: number): boolean
+function GroupRewardController:Joined(GroupId: number): boolean
+	local Event = Core:GetController("EventController")
+	while Event.prompting do
+		task.wait()
+	end
+	self.joining = true
 	local Success, Status = pcall(GroupService.PromptJoinAsync, GroupService, GroupId)
+	self.joining = false
 	return Success and (Status == Enum.GroupMembershipStatus.Joined or Status == Enum.GroupMembershipStatus.AlreadyMember)
 end
 
@@ -32,7 +38,7 @@ function GroupRewardController:Claim()
 	end
 	self.claiming = true
 	local Status, GroupId = Remotemanager:InvokeServer("GroupRewardService", "Claim")
-	if Status == "Join" and Joined(GroupId) then
+	if Status == "Join" and self:Joined(GroupId) then
 		Status = Remotemanager:InvokeServer("GroupRewardService", "Claim")
 	end
 	if Status == "Claimed" then
@@ -50,12 +56,18 @@ function GroupRewardController:Settle()
 	end
 end
 
+function GroupRewardController:Greeted()
+	if not self.greeted then
+		self.greet.Event:Wait()
+	end
+end
+
 function GroupRewardController:Invite(): boolean
 	local GroupId, Member = Remotemanager:InvokeServer("GroupRewardService", "Status")
 	if Member then
 		return true
 	end
-	if self.claiming or not Joined(GroupId) then
+	if self.claiming or not self:Joined(GroupId) then
 		return false
 	end
 	self:Claim()
@@ -65,6 +77,9 @@ end
 function GroupRewardController:Init()
 	local Chest = Workspace:WaitForChild("GroupRewardChest")
 	self.claiming = false
+	self.joining = false
+	self.greeted = false
+	self.greet = Instance.new("BindableEvent")
 	ProximityPromptService.PromptTriggered:Connect(function(Prompt)
 		if (Prompt.Parent :: Instance).Parent == Chest then
 			UiFade.Click()
@@ -80,9 +95,13 @@ function GroupRewardController:Start()
 			Loading:GetAttributeChangedSignal("Ready"):Wait()
 		end
 		self:Settle()
-		while not self:Invite() do
+		local Member = self:Invite()
+		self.greeted = true
+		self.greet:Fire()
+		while not Member do
 			task.wait(InviteInterval)
 			self:Settle()
+			Member = self:Invite()
 		end
 	end)
 end

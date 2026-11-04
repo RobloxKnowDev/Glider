@@ -19,6 +19,10 @@ type Run = {
 	Clean: boolean,
 }
 
+local DayLength = 86400
+local DayCheck = 10
+local LaunchDay = DateTime.fromUniversalTime(2026, 11, 4).UnixTimestamp // DayLength
+
 local Sections = {
 	Solo = "Record",
 	Duo = "DuoRecord",
@@ -27,7 +31,26 @@ local Records: { [string]: { [Player]: number } } = {
 	Solo = {},
 	Duo = {},
 }
+local Bests: { [string]: { [Player]: number } } = {
+	Solo = {},
+	Duo = {},
+}
 local Runs: { [Player]: Run } = {}
+
+local function Lowest(First: number?, Second: number?): number?
+	if First and Second then
+		return math.min(First, Second)
+	end
+	return First or Second
+end
+
+function RecordService:Today(): number
+	return os.time() // DayLength
+end
+
+function RecordService:IsLaunchDay(): boolean
+	return self:Today() == LaunchDay
+end
 
 function RecordService:Run(Player: Player): Run
 	local Run = Runs[Player]
@@ -62,8 +85,33 @@ function RecordService:Push(Player: Player)
 	Remotemanager:FireClient(self.Name, "Updated", Player, Records.Solo[Player], Records.Duo[Player])
 end
 
+function RecordService:Roll()
+	local Today = self:Today()
+	if Today == self.day then
+		return
+	end
+	self.day = Today
+	for _, List in pairs(Records) do
+		table.clear(List)
+	end
+	for _, Player in ipairs(Players:GetPlayers()) do
+		self:Push(Player)
+	end
+end
+
+function RecordService:Settle(Player: Player)
+	Core:GetService("DataService"):WaitForLoad(Player)
+	for Mode, List in pairs(Records) do
+		local Time = List[Player]
+		if Time then
+			Core:GetService("LeaderboardService"):Post(Mode, Player, Time, false)
+		end
+	end
+end
+
 function RecordService:Finish(Player: Player, Mode: string): (number, boolean)
 	self:Pause(Player)
+	self:Roll()
 	local Levels = Core:GetService("LevelService")
 	local Run = self:Run(Player)
 	local Time = Run.Elapsed
@@ -75,34 +123,74 @@ function RecordService:Finish(Player: Player, Mode: string): (number, boolean)
 		return Time, false
 	end
 	Records[Mode][Player] = Time
+	Bests[Mode][Player] = Lowest(Bests[Mode][Player], Time)
 	self:Push(Player)
 	Core:GetService("LeaderboardService"):Post(Mode, Player, Time, true)
 	return Time, true
 end
 
 function RecordService:Init()
+	self.day = self:Today()
+	local Data = Core:GetService("DataService")
 	for Mode, Section in pairs(Sections) do
-		Core:GetService("DataService"):Register(Section, {
+		Data:Register(Section, {
 			Load = function(Player, Saved)
-				Records[Mode][Player] = Saved
-				self:Push(Player)
-				Core:GetService("LeaderboardService"):Post(Mode, Player, Saved, false)
+				self:Roll()
+				Bests[Mode][Player] = Lowest(Bests[Mode][Player], Saved)
+				if self.day == LaunchDay then
+					Records[Mode][Player] = Lowest(Records[Mode][Player], Saved)
+				end
 			end,
 			Save = function(Player)
-				return Records[Mode][Player]
+				return Bests[Mode][Player]
 			end,
 			Clear = function(Player)
-				Records[Mode][Player] = nil
+				Bests[Mode][Player] = nil
 			end,
 		})
 	end
+	Data:Register("Daily", {
+		Load = function(Player, Saved)
+			self:Roll()
+			if Saved.Day ~= self.day then
+				return
+			end
+			for Mode, List in pairs(Records) do
+				List[Player] = Lowest(List[Player], Saved[Mode])
+				Bests[Mode][Player] = Lowest(Bests[Mode][Player], Saved[Mode])
+			end
+		end,
+		Save = function(Player)
+			return { Day = self.day, Solo = Records.Solo[Player], Duo = Records.Duo[Player] }
+		end,
+		Clear = function(Player)
+			for _, List in pairs(Records) do
+				List[Player] = nil
+			end
+		end,
+	})
 
 	Remotemanager:OnServerInvoke(self.Name, "GetRecord", function(Player)
-		Core:GetService("DataService"):WaitForLoad(Player)
+		Data:WaitForLoad(Player)
 		return Records.Solo[Player], Records.Duo[Player]
 	end)
+	Players.PlayerAdded:Connect(function(Player)
+		self:Settle(Player)
+	end)
+	for _, Player in ipairs(Players:GetPlayers()) do
+		task.spawn(self.Settle, self, Player)
+	end
 	Players.PlayerRemoving:Connect(function(Player)
 		Runs[Player] = nil
+	end)
+end
+
+function RecordService:Start()
+	task.spawn(function()
+		while true do
+			task.wait(DayCheck)
+			self:Roll()
+		end
 	end)
 end
 

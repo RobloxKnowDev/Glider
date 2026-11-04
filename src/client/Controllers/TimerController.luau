@@ -230,7 +230,7 @@ function TimerController:Record()
 	local Duo = Player:GetAttribute("Grouped")
 	local Time = if Duo then self.duo else self.solo
 	local Text = if Time then Format(Time) else "--:--.--"
-	local Pattern = if Duo then "Best Duo: {1}" else "Best Solo: {1}"
+	local Pattern = if Duo then "Daily Best Duo: {1}" else "Daily Best Solo: {1}"
 	Translation.Set(self.best, Pattern, Text)
 	Translation.Set(self.lobby, Pattern, Text)
 end

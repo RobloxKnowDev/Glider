@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
@@ -15,9 +16,10 @@ local ReviveController = {
 }
 
 local Player = Players.LocalPlayer
-local Single = Store.Revive[1]
+local Ladder = Store.ReviveLadder
 local Robux = "\u{E002}"
 local WaitingDrop = UDim.new(0.3, 0)
+local SpinInfo = TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1)
 
 function ReviveController:Paint()
 	local Owner = self.pilot == Player
@@ -29,6 +31,22 @@ function ReviveController:Paint()
 	else
 		Translation.Set(self.reviveText, "Revive({1})", self.price .. Robux)
 	end
+end
+
+function ReviveController:Climb(Step: number)
+	if Step == self.step then
+		return
+	end
+	self.step = Step
+	local Pack = Ladder[Step]
+	self.price = Pack.Price
+	task.spawn(function()
+		local Price = RobuxPrice(Pack)
+		if self.step == Step then
+			self.price = Price
+			self:Paint()
+		end
+	end)
 end
 
 function ReviveController:Label()
@@ -74,11 +92,13 @@ function ReviveController:Init()
 	local Frame = Player:WaitForChild("PlayerGui"):WaitForChild("ReviveUi"):WaitForChild("Frame") :: GuiObject
 	local ReviveButton = Frame:WaitForChild("ReviveButton") :: GuiButton
 	local ContinueButton = Frame:WaitForChild("ContinueButton") :: GuiButton
+	local Effect = Frame:WaitForChild("Effect") :: ImageLabel
 	local Waiting = Frame:WaitForChild("Text"):Clone() :: TextLabel
 	Waiting.Name = "Waiting"
 	Waiting.Position += UDim2.new(UDim.new(), WaitingDrop)
 	Waiting.Parent = Frame
 	Frame.Visible = false
+	TweenService:Create(Effect, SpinInfo, { Rotation = Effect.Rotation + 360 }):Play()
 
 	self.frame = Frame
 	self.reviveButton = ReviveButton
@@ -87,13 +107,15 @@ function ReviveController:Init()
 	self.continueText = ContinueButton:WaitForChild("Text") :: TextLabel
 	self.waiting = Waiting
 	self.count = 0
-	self.price = Single.Price
+	self.step = 0
+	self.price = 0
 	self.remaining = 0
 	self.deadline = 0
 	self.paused = false
 	self.seconds = -1
 	self.pilot = Player
 	self.loop = nil :: RBXScriptConnection?
+	self:Climb(1)
 	self:Paint()
 
 	UiFade.BindButton(ReviveButton)
@@ -122,19 +144,18 @@ function ReviveController:Init()
 			self:Hide()
 		end)
 	end
-	Remotemanager:OnClientEvent("ReviveService", "Updated", function(Count)
+	Remotemanager:OnClientEvent("ReviveService", "Updated", function(Count, Step)
 		self.count = Count
+		self:Climb(Step)
 		self:Paint()
 	end)
 end
 
 function ReviveController:Start()
 	task.spawn(function()
-		self.count = Remotemanager:InvokeServer("ReviveService", "GetRevives")
-		self:Paint()
-	end)
-	task.spawn(function()
-		self.price = RobuxPrice(Single)
+		local Count, Step = Remotemanager:InvokeServer("ReviveService", "GetRevives")
+		self.count = Count
+		self:Climb(Step)
 		self:Paint()
 	end)
 end

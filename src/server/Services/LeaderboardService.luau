@@ -41,17 +41,34 @@ local PlaceColors = {
 	Color3.fromRGB(200, 215, 230),
 	Color3.fromRGB(215, 130, 60),
 }
-local Stores = {
-	Solo = DataStoreService:GetOrderedDataStore("BestSolo_v1"),
-	Duo = DataStoreService:GetOrderedDataStore("BestDuo_v1"),
-	Robux = DataStoreService:GetOrderedDataStore("TopSpenders_v1"),
+local Keys = { "Solo", "Duo", "Robux" }
+local Daily = {
+	Solo = "DailySolo_v1",
+	Duo = "DailyDuo_v1",
 }
+local Legacy = {
+	Solo = "BestSolo_v1",
+	Duo = "BestDuo_v1",
+}
+local Spenders = DataStoreService:GetOrderedDataStore("TopSpenders_v1")
 local Reads = 3
 local Spent: { [Player]: number } = {}
 
+local function Store(Key: string): OrderedDataStore
+	if Key == "Robux" then
+		return Spenders
+	end
+	local Records = Core:GetService("RecordService")
+	if Records:IsLaunchDay() then
+		return DataStoreService:GetOrderedDataStore(Legacy[Key])
+	end
+	return DataStoreService:GetOrderedDataStore(Daily[Key], tostring(Records:Today()))
+end
+
 local function Fetch(Key: string): { Entry }?
+	local Board = Store(Key)
 	local Success, Result = Datastorerequest.Run(Attempts, function()
-		return Stores[Key]:GetSortedAsync(Key ~= "Robux", Size):GetCurrentPage()
+		return Board:GetSortedAsync(Key ~= "Robux", Size):GetCurrentPage()
 	end)
 	if not Success then
 		warn("LeaderboardService: could not read " .. Key .. ": " .. tostring(Result))
@@ -71,12 +88,13 @@ function LeaderboardService:Write(Key: string, UserId: number, Value: number, Ch
 	if UserId <= 0 then
 		return
 	end
+	local Board = Store(Key)
 	task.spawn(function()
 		local Success, Error = Datastorerequest.Run(Attempts, function()
 			if Value > 0 then
-				Stores[Key]:SetAsync(tostring(UserId), Value)
+				Board:SetAsync(tostring(UserId), Value)
 			else
-				Stores[Key]:RemoveAsync(tostring(UserId))
+				Board:RemoveAsync(tostring(UserId))
 			end
 		end)
 		if not Success then
@@ -123,9 +141,10 @@ function LeaderboardService:Erase(UserId: number): (boolean, string?)
 	if UserId <= 0 then
 		return true, nil
 	end
-	for Key, Store in pairs(Stores) do
+	for _, Key in ipairs(Keys) do
+		local Board = Store(Key)
 		local Success, Error = Datastorerequest.Run(Attempts, function()
-			Store:RemoveAsync(tostring(UserId))
+			Board:RemoveAsync(tostring(UserId))
 		end)
 		if not Success then
 			return false, Key .. ": " .. tostring(Error)
@@ -172,7 +191,7 @@ function LeaderboardService:Refresh()
 	local Pages: { [string]: { Entry } } = {}
 	local Ids: { number } = {}
 	local Listed: { [number]: boolean } = {}
-	for Key in pairs(Stores) do
+	for _, Key in ipairs(Keys) do
 		local Page = Fetch(Key)
 		if not Page then
 			return

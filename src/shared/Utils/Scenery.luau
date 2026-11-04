@@ -3,6 +3,7 @@ local TweenService = game:GetService("TweenService")
 local SpinSpeed = math.rad(90)
 local SwingAngle = math.rad(70)
 local SwingSpeed = 1.5
+local SwingHold = 0.5
 local SwingStyle = Enum.EasingStyle.Cubic
 local RiseCycle = 4
 local RiseTime = 0.6
@@ -118,8 +119,10 @@ function Scenery.Mark(Part: BasePart, Motion: string, Hinge: CFrame, Axis: Vecto
 end
 
 local function Swing(Time: number, Phase: number): number
-	local Cycle = ((Time * SwingSpeed + Phase) / math.pi) % 2
-	local Progress = if Cycle < 1 then Cycle else 2 - Cycle
+	local Travel = math.pi / SwingSpeed
+	local Half = Travel + SwingHold
+	local Clock = (Time + Phase / SwingSpeed) % (2 * Half)
+	local Progress = if Clock < Half then math.min(Clock / Travel, 1) else 1 - math.min((Clock - Half) / Travel, 1)
 	return SwingAngle * (2 * TweenService:GetValue(Progress, SwingStyle, Enum.EasingDirection.InOut) - 1)
 end
 

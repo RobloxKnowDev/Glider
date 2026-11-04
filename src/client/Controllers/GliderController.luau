@@ -29,7 +29,7 @@ local DriftResponse = 1.5
 local RingBoost = 12
 local BoostResponse = 1.5
 local MaxBank = math.rad(30)
-local TurnSpeed = math.rad(30)
+local TurnSpeed = math.rad(45)
 local BankResponse = 3
 local Deadzone = 0.1
 
