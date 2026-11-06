@@ -29,7 +29,7 @@ function Sfx.Prepare(Id: string): Sound
 	return Pool(Id)[1]
 end
 
-function Sfx.Play(Id: string, Volume: number, Speed: number?)
+function Sfx.Play(Id: string, Volume: number, Speed: number?, Start: number?)
 	local List = Pool(Id)
 	local Sound
 	for _, Idle in ipairs(List) do
@@ -44,7 +44,7 @@ function Sfx.Play(Id: string, Volume: number, Speed: number?)
 	end
 	Sound.Volume = Volume
 	Sound.PlaybackSpeed = Speed or 1
-	Sound.TimePosition = 0
+	Sound.TimePosition = Start or 0
 	Sound:Play()
 end
 

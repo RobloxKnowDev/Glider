@@ -201,6 +201,20 @@ local function Holdings(Inventory: { Owned: { string }, Equipped: string }?, Cat
 	)
 end
 
+local function Bought(Purchase: { Item: string, Robux: number, Time: number, Note: string?, Studio: boolean? }): string
+	local Parts = { Stamp(Purchase.Time * 1000), Purchase.Item }
+	if Purchase.Robux > 0 then
+		table.insert(Parts, Purchase.Robux .. " Robux")
+	end
+	if Purchase.Note then
+		table.insert(Parts, Purchase.Note)
+	end
+	if Purchase.Studio then
+		table.insert(Parts, "Studio test")
+	end
+	return "  " .. table.concat(Parts, " | ")
+end
+
 local function Inspect(Account: Account): string
 	local Data = Core:GetService("DataService")
 	local Read, Saved, Info = Data:Read(Account.UserId)
@@ -237,6 +251,11 @@ local function Inspect(Account: Account): string
 		table.insert(Lines, Holdings(Sections[Category], Category))
 	end
 	table.insert(Lines, "Packs: " .. (if #Passes > 0 then table.concat(Passes, ", ") else "none"))
+	local History = Sections.History or {}
+	table.insert(Lines, "Purchase log: " .. (if #History > 0 then #History .. " entries" else "none"))
+	for _, Purchase in ipairs(History) do
+		table.insert(Lines, Bought(Purchase))
+	end
 	table.insert(Lines, "Group reward: " .. (if Sections.Group then "claimed" else "not claimed"))
 	table.insert(Lines, "Tutorial: " .. (if Sections.Tutorial then "done" else "not done"))
 	if Account.Player then

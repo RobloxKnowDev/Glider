@@ -24,6 +24,7 @@ local SpinInfo = TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.
 function ReviveController:Paint()
 	local Owner = self.pilot == Player
 	self.reviveButton.Visible = Owner
+	self.effect.Visible = Owner
 	self.continueButton.Visible = Owner
 	self.waiting.Visible = not Owner
 	if self.count > 0 then
@@ -102,6 +103,7 @@ function ReviveController:Init()
 
 	self.frame = Frame
 	self.reviveButton = ReviveButton
+	self.effect = Effect
 	self.continueButton = ContinueButton
 	self.reviveText = ReviveButton:WaitForChild("Text") :: TextLabel
 	self.continueText = ContinueButton:WaitForChild("Text") :: TextLabel

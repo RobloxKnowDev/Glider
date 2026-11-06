@@ -1,5 +1,4 @@
 local DataStoreService = game:GetService("DataStoreService")
-local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -9,7 +8,6 @@ local Workspace = game:GetService("Workspace")
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
 local Chrono = require(ReplicatedStorage.Shared.Utils.Chrono)
 local NumberAbbreviator = require(ReplicatedStorage.Shared.Utils.NumberAbbreviator)
-local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Datastorerequest = require(script.Parent.Parent.Utils.Datastorerequest)
 
 local LeaderboardService = {
@@ -234,16 +232,6 @@ function LeaderboardService:Init()
 			Spent[Player] = nil
 		end,
 	})
-
-	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(Player, Id, Purchased)
-		if not Purchased then
-			return
-		end
-		local Price = RobuxPrice({ Gamepass = Id })
-		if Price then
-			self:Spend(Player, Price)
-		end
-	end)
 end
 
 function LeaderboardService:Start()

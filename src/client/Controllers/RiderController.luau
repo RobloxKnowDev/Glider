@@ -22,6 +22,8 @@ type Rider = {
 	Height: number,
 	Offset: number,
 	Target: number?,
+	Low: number,
+	High: number,
 	Phase: number,
 	Shimmy: number,
 	Direction: number,
@@ -74,6 +76,8 @@ function RiderController:Track(Weld: Weld): Rider
 		Height = Weld:GetAttribute("Height"),
 		Offset = Weld:GetAttribute("Offset"),
 		Target = nil,
+		Low = -math.huge,
+		High = math.huge,
 		Phase = 0,
 		Shimmy = 0,
 		Direction = 1,
@@ -101,9 +105,16 @@ function RiderController:Steer(Rider: Rider, Offset: number)
 	Rider.Target = Offset
 end
 
+function RiderController:Keep(Rider: Rider, Low: number, High: number)
+	Rider.Low = Low
+	Rider.High = High
+end
+
 function RiderController:Reset(Rider: Rider)
 	Rider.Offset = Rider.Weld:GetAttribute("Offset")
 	Rider.Target = nil
+	Rider.Low = -math.huge
+	Rider.High = math.huge
 end
 
 function RiderController:Init()
@@ -127,7 +138,11 @@ function RiderController:Init()
 				Riders[Weld] = nil
 				continue
 			end
-			local Offset = Rider.Target or Approach(Rider.Offset, Weld:GetAttribute("Offset"), Response, Dt)
+			local Offset = math.clamp(
+				Rider.Target or Approach(Rider.Offset, Weld:GetAttribute("Offset"), Response, Dt),
+				Rider.Low,
+				Rider.High
+			)
 			local Moved = Offset - Rider.Offset
 			if Moved ~= 0 then
 				Rider.Direction = math.sign(Moved)

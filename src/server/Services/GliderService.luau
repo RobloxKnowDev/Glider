@@ -242,6 +242,7 @@ function GliderService:Launch(Team: { Player })
 		Weld.C0 = GliderSeat(Frame, Height, Offset)
 		Weld:SetAttribute("Height", Height)
 		Weld:SetAttribute("Offset", Offset)
+		Weld:SetAttribute("Push", 0)
 		Weld.Parent = Seats
 		Flight.Riders[Player] = {
 			Weld = Weld,
@@ -397,12 +398,14 @@ function GliderService:Quit(Player: Player)
 	self:Dismount(Flight)
 end
 
-function GliderService:Move(Player: Player, Offset: any)
+function GliderService:Move(Player: Player, Offset: any, Push: any)
 	local Flight = Flights[Player]
-	if not Flight or Flight.Crashed or not Finite(Offset) then
+	if not Flight or Flight.Crashed or not Finite(Offset) or not Finite(Push) then
 		return
 	end
-	self:Place(Flight, Flight.Riders[Player], math.clamp(Offset, -Flight.Limit, Flight.Limit))
+	local Rider = Flight.Riders[Player]
+	self:Place(Flight, Rider, math.clamp(Offset, -Flight.Limit, Flight.Limit))
+	Rider.Weld:SetAttribute("Push", math.sign(Push))
 end
 
 function GliderService:Place(Flight: Flight, Rider: Rider, Offset: number)
@@ -699,8 +702,8 @@ function GliderService:Init()
 		Core:GetService("FunnelService"):Log(Player, "Solo")
 		self:Launch({ Player })
 	end)
-	Remotemanager:OnServerEvent(self.Name, "Move", function(Player, Offset)
-		self:Move(Player, Offset)
+	Remotemanager:OnServerEvent(self.Name, "Move", function(Player, Offset, Push)
+		self:Move(Player, Offset, Push)
 	end)
 	Remotemanager:OnServerEvent(self.Name, "Crash", function(Player)
 		local Flight = Flights[Player]
@@ -773,6 +776,12 @@ function GliderService:Start()
 	end
 	self.touch = OverlapParams.new()
 	self.touch.FilterType = Enum.RaycastFilterType.Include
+	for _, Child in ipairs(Workspace:WaitForChild("InvisibleWalls"):GetChildren()) do
+		local Wall = Child :: BasePart
+		Wall.Anchored = true
+		Wall.CanCollide = true
+		Wall.Transparency = 1
+	end
 
 	local Rings = Workspace:WaitForChild("RingsFolder")
 	self.rings = {}

@@ -28,6 +28,7 @@ local function Ground(Folder: Instance): RaycastParams
 		Workspace:WaitForChild("RingsFolder"),
 		Workspace:WaitForChild("Windzones"),
 		Workspace:WaitForChild("WindTurbineZones"),
+		Workspace:WaitForChild("InvisibleWalls"),
 	}
 	Params.RespectCanCollide = true
 	return Params
@@ -66,7 +67,7 @@ function SceneryService:Hatch(Model: Model, Zone: BasePart, Index: number, Count
 			Child:Destroy()
 		elseif Child:IsA("BasePart") then
 			Child.Anchored = true
-			Child.CanCollide = true
+			Child.CanCollide = false
 			Child:SetAttribute("Zone", Zone.CFrame)
 			Child:SetAttribute("Extent", Zone.Size)
 		end
@@ -124,7 +125,8 @@ function SceneryService:Whirl(Folder: Instance)
 				Part:Destroy()
 			elseif Part:IsA("BasePart") then
 				Part.Anchored = true
-				Part.CanCollide = true
+				Part.CanCollide = false
+				Part.CanQuery = true
 				Part:SetAttribute("Extent", Reach)
 				Scenery.Mark(Part, "Whirl", Base, Vector3.yAxis, Index)
 			end

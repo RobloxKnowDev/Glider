@@ -14,7 +14,7 @@ local LevelService = {
 }
 
 local Levels: { [Player]: number } = {}
-local Checkpoints = { 3, 6, 8 }
+local CheckpointSpacing = 1
 
 function LevelService:Get(Player: Player): number
 	return Levels[Player] or 1
@@ -34,13 +34,7 @@ function LevelService:Reset(Player: Player)
 end
 
 function LevelService:Checkpoint(Level: number): number
-	local Start = 1
-	for _, Finish in ipairs(Checkpoints) do
-		if Level > Finish then
-			Start = Finish + 1
-		end
-	end
-	return Start
+	return Level - (Level - 1) % CheckpointSpacing
 end
 
 function LevelService:Fall(Player: Player)

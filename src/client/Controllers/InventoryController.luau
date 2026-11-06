@@ -262,7 +262,7 @@ function InventoryController:Page(Category: string, Catalog: Catalog, Gui: Insta
 		Order[Entry] = Index
 	end
 	local function Group(Entry: Entry): number
-		return if Entry.Name == Catalog.Default then 0 elseif Offers[Entry.Name] then 1 else 1 + Rarities[Entry.Rarity].Rank
+		return if Offers[Entry.Name] then 0 elseif Entry.Name == Catalog.Default then 1 else 1 + Rarities[Entry.Rarity].Rank
 	end
 	local Sorted = table.clone(Catalog.List)
 	table.sort(Sorted, function(A, B)

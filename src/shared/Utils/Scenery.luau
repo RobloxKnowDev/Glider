@@ -319,6 +319,10 @@ local function Wander(Piece: Piece, Time: number): Vector3
 	return Vector3.new(X, 0, Z)
 end
 
+function Scenery.Eye(Piece: Piece, Time: number): Vector3
+	return Piece.Hinge:PointToWorldSpace(Wander(Piece, Time))
+end
+
 function Scenery.Pose(Piece: Piece, Time: number, Altitude: number?): CFrame
 	if Piece.Motion == "Fly" then
 		return Flight(Piece, Time, Piece.Hinge * Piece.Local, Altitude)

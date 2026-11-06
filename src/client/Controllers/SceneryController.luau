@@ -169,6 +169,10 @@ function SceneryController:Pose()
 	self:Rumble()
 end
 
+function SceneryController:Eye(Part: BasePart): Vector3
+	return Scenery.Eye(self.pieces[Part], Workspace:GetServerTimeNow())
+end
+
 function SceneryController:Aim(Altitude: number?)
 	self.altitude = Altitude
 end

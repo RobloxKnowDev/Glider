@@ -19,6 +19,8 @@ local Sounds: { [string]: { [string]: string } } = {
 		Boost = "rbxassetid://9126229255",
 		Crash = "rbxassetid://9120796401",
 		Thud = "rbxassetid://9113480915",
+		Bird = "rbxassetid://9114369862",
+		Tornado = "rbxassetid://9120697823",
 		Finish = "rbxassetid://9125446692",
 	},
 	Ring = {

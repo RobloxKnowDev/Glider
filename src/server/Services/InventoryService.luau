@@ -1,5 +1,4 @@
 local MarketplaceService = game:GetService("MarketplaceService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -123,10 +122,12 @@ function InventoryService:Give(Player: Player, Category: string, Name: string): 
 	return true
 end
 
-function InventoryService:Unlock(Player: Player, Category: string, Name: string)
-	if self:Give(Player, Category, Name) then
-		Remotemanager:FireClient(self.Name, "Obtained", Player, Category, Name)
+function InventoryService:Unlock(Player: Player, Category: string, Name: string): boolean
+	if not self:Give(Player, Category, Name) then
+		return false
 	end
+	Remotemanager:FireClient(self.Name, "Obtained", Player, Category, Name)
+	return true
 end
 
 function InventoryService:Take(Player: Player, Category: string, Name: string): boolean
@@ -170,30 +171,6 @@ function InventoryService:Buy(Player: Player, Category: any, Name: any)
 		self:Unlock(Player, Category, Name)
 	else
 		MarketplaceService:PromptGamePassPurchase(Player, Id)
-	end
-end
-
-function InventoryService:Grant(Player: Player, Id: number)
-	for Category, Passes in pairs(Gamepasses) do
-		for Name, Pass in pairs(Passes) do
-			if Pass == Id then
-				self:Unlock(Player, Category, Name)
-			end
-		end
-	end
-end
-
-function InventoryService:CheckGamepasses(Player: Player)
-	Core:GetService("DataService"):WaitForLoad(Player)
-	for _, Passes in pairs(Gamepasses) do
-		for _, Id in pairs(Passes) do
-			if Id ~= 0 and Player.Parent then
-				local Success, Owned = pcall(MarketplaceService.UserOwnsGamePassAsync, MarketplaceService, Player.UserId, Id)
-				if Success and Owned then
-					self:Grant(Player, Id)
-				end
-			end
-		end
 	end
 end
 
@@ -277,11 +254,6 @@ function InventoryService:Init()
 	Remotemanager:OnServerEvent(self.Name, "Buy", function(Player, Category, Name)
 		self:Buy(Player, Category, Name)
 	end)
-	MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(Player, Id, Purchased)
-		if Purchased then
-			self:Grant(Player, Id)
-		end
-	end)
 end
 
 function InventoryService:Start()
@@ -298,12 +270,6 @@ function InventoryService:Start()
 				self:Npc(Skins:WaitForChild(Npc):WaitForChild("HumanoidRootPart") :: BasePart, Category)
 			end
 		end
-	end
-	Players.PlayerAdded:Connect(function(Player)
-		self:CheckGamepasses(Player)
-	end)
-	for _, Player in ipairs(Players:GetPlayers()) do
-		task.spawn(self.CheckGamepasses, self, Player)
 	end
 end
 

@@ -2,7 +2,6 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Core = require(ReplicatedStorage.Shared.Packages.Core)
@@ -20,7 +19,7 @@ local Player = Players.LocalPlayer
 local ForwardSpeed = 30
 local LevelSpeed = 5
 local SinkSpeed = 6
-local WindLiftSpeed = 25
+local WindLiftSpeed = 20
 local LiftResponse = 6
 local SinkResponse = 2
 local TurbinePush = 30
@@ -28,12 +27,21 @@ local PushResponse = 3
 local DriftResponse = 1.5
 local RingBoost = 12
 local BoostResponse = 1.5
+local BirdPush = 80
+local KnockResponse = 0.75
+local KnockGrace = 1
+local TornadoLift = 35
+local TornadoPush = 120
+local TossGrace = 1.5
+local RollTime = 1.2
+local RollStyle = Enum.EasingStyle.Quad
 local MaxBank = math.rad(30)
 local TurnSpeed = math.rad(45)
 local BankResponse = 3
 local Deadzone = 0.1
 
 local RiderSpeed = 10
+local CenterSpeed = 6
 local RiderGap = 3
 local SendInterval = 0.1
 
@@ -41,12 +49,6 @@ local CameraDistance = 30
 local CameraHeight = 12
 local CameraLookAhead = 40
 local CameraRoll = 0.3
-local DragSpeed = math.rad(0.3)
-local StickSpeed = math.rad(150)
-local StickDeadzone = 0.2
-local PitchLimit = math.rad(35)
-local ReturnDelay = 2.5
-local ReturnResponse = 3
 local CrashDistance = 18
 local CrashResponse = 4
 local BodyGrace = 1
@@ -62,7 +64,11 @@ local GustVolume = 0.6
 local BoostVolume = 0.6
 local CrashVolume = 0.8
 local ThudVolume = 0.7
+local BirdVolume = 0.7
+local TornadoVolume = 0.38
+local TornadoStart = 0.3
 local FinishVolume = 1.3
+local Flat = Vector3.new(1, 0, 1)
 
 local function Approach(Current: number, Target: number, Response: number, Dt: number): number
 	return Current + (Target - Current) * (1 - math.exp(-Response * Dt))
@@ -84,6 +90,9 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Rings = Workspace:WaitForChild("RingsFolder")
 	local Windzones = Workspace:WaitForChild("Windzones")
 	local TurbineZones = Workspace:WaitForChild("WindTurbineZones")
+	local Walls = Workspace:WaitForChild("InvisibleWalls")
+	local Birds = Workspace:WaitForChild("BirdsZones")
+	local Tornadoes = Workspace:WaitForChild("TornadoZone")
 	local Glider = Folder:WaitForChild(Name) :: Model
 	local Bar = Glider:WaitForChild("Bar") :: BasePart
 	local Frame: CFrame = Glider:GetAttribute("Frame")
@@ -106,6 +115,9 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	for _, Rider in ipairs(Crew) do
 		RiderController:Reset(Rider)
 	end
+	local Partner = Crew[2]
+	local Toward = if Partner then math.sign(Partner.Offset - Me.Offset) else 0
+	local Rest = -Toward * math.min(RiderGap, Limit)
 
 	local Near = OverlapParams.new()
 	Near.FilterType = Enum.RaycastFilterType.Exclude
@@ -113,6 +125,12 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Touch = OverlapParams.new()
 	Touch.FilterType = Enum.RaycastFilterType.Include
 	Touch.RespectCanCollide = true
+	local Flock = OverlapParams.new()
+	Flock.FilterType = Enum.RaycastFilterType.Include
+	Flock.FilterDescendantsInstances = { Birds }
+	local Twister = OverlapParams.new()
+	Twister.FilterType = Enum.RaycastFilterType.Include
+	Twister.FilterDescendantsInstances = { Tornadoes }
 	local Hull: { BasePart } = {}
 	for _, Part in ipairs(Glider:GetDescendants()) do
 		if Part:IsA("BasePart") and Part.Transparency < 1 then
@@ -130,12 +148,14 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Climb = -SinkSpeed
 	local Drift = Vector3.zero
 	local Boost = 0
+	local Recoil = 0
+	local Calm = 0
+	local Pecked = false
+	local Shove = BirdPush
+	local Roll = 0
+	local Tossed = -math.huge
+	local Spun = false
 	local Sendtimer = 0
-	local OrbitYaw = 0
-	local OrbitPitch = 0
-	local Idle = 0
-	local Stick = Vector2.zero
-	local Locked = false
 	local Follow: Vector3? = nil
 	local Watch = Vector3.zero
 	local Gusting = false
@@ -148,32 +168,10 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		end
 		Watch = Camera.CFrame.Position
 		Follow = (Watch - Head.Position).Unit * CrashDistance
-		Locked = false
-		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 		Wind:Stop()
 		Sfx.Play(Sounds.Flight.Crash, CrashVolume)
 		Sfx.Play(Sounds.Flight.Thud, ThudVolume)
 	end
-
-	local function Orbit(Turn: number, Tilt: number)
-		OrbitYaw = (OrbitYaw - Turn + math.pi) % (2 * math.pi) - math.pi
-		OrbitPitch = math.clamp(OrbitPitch - Tilt, -PitchLimit, PitchLimit)
-		Idle = 0
-	end
-
-	local Look = UserInputService.InputChanged:Connect(function(Input, Processed)
-		if Input.UserInputType == Enum.UserInputType.MouseMovement then
-			if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
-				Orbit(Input.Delta.X * DragSpeed, Input.Delta.Y * DragSpeed)
-			end
-		elseif Input.UserInputType == Enum.UserInputType.Touch then
-			if not Processed then
-				Orbit(Input.Delta.X * DragSpeed, Input.Delta.Y * DragSpeed)
-			end
-		elseif Input.KeyCode == Enum.KeyCode.Thumbstick2 then
-			Stick = Vector2.new(Input.Position.X, -Input.Position.Y)
-		end
-	end)
 
 	local Loop = RunService.RenderStepped:Connect(function(Dt)
 		if Follow then
@@ -192,21 +190,28 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			-1,
 			1
 		)
-		local Offset = math.clamp(Me.Offset + Side * RiderSpeed * Dt, -Limit, Limit)
+		local Step = if Side ~= 0
+			then Side * RiderSpeed * Dt
+			else math.clamp(Rest - Me.Offset, -CenterSpeed * Dt, CenterSpeed * Dt)
+		local Offset = math.clamp(Me.Offset + Step, -Limit, Limit)
 		local Total = 0
 		local Count = 1
-		for _, Rider in ipairs(Crew) do
-			if Rider ~= Me and Rider.Weld.Parent then
-				if math.abs(Offset - Rider.Offset) < RiderGap then
-					Offset = math.clamp(
-						if Me.Offset < Rider.Offset then Rider.Offset - RiderGap else Rider.Offset + RiderGap,
-						-Limit,
-						Limit
-					)
-				end
-				Total += Rider.Offset
-				Count += 1
+		if Partner and Partner.Weld.Parent then
+			local Pushing = Side * Toward > 0 and Partner.Weld:GetAttribute("Push") * Toward >= 0
+			if not Pushing and (Partner.Offset - Offset) * Toward < RiderGap then
+				Offset = Partner.Offset - Toward * RiderGap
 			end
+			Offset = if Toward > 0
+				then math.clamp(Offset, -Limit, Limit - RiderGap)
+				else math.clamp(Offset, RiderGap - Limit, Limit)
+			local Edge = Offset + Toward * RiderGap
+			if Toward > 0 then
+				RiderController:Keep(Partner, Edge, Limit)
+			else
+				RiderController:Keep(Partner, -Limit, Edge)
+			end
+			Total = Partner.Offset
+			Count = 2
 		end
 		RiderController:Steer(Me, Offset)
 		Total += Offset
@@ -247,10 +252,14 @@ function GliderController:Begin(Name: string, Start: CFrame)
 				then Drift:Lerp(Push, 1 - math.exp(-PushResponse * Dt))
 				else Drift:Lerp(Vector3.zero, 1 - math.exp(-DriftResponse * Dt))
 			Boost = Approach(Boost, 0, BoostResponse, Dt)
+			Recoil = Approach(Recoil, 0, KnockResponse, Dt)
 			local Speed = ForwardSpeed + (Glider:GetAttribute("Level") - 1) * LevelSpeed
-			local Velocity = Heading.LookVector * (Speed + Boost) + Vector3.yAxis * Climb + Drift
+			local Forward = (Speed + Boost) * (1 - Recoil) - Shove * Recoil
+			local Velocity = Heading.LookVector * Forward + Vector3.yAxis * Climb + Drift
 			Position += Velocity * Dt
-			Bar.CFrame = CFrame.new(Position) * Heading * CFrame.Angles(0, 0, -Bank) * Unframe
+			local Spin = math.min((os.clock() - Tossed) / RollTime, 1)
+			local Flip = Roll * 2 * math.pi * TweenService:GetValue(Spin, RollStyle, Enum.EasingDirection.Out)
+			Bar.CFrame = CFrame.new(Position) * Heading * CFrame.Angles(0, 0, -Bank - Flip) * Unframe
 			Bar.AssemblyLinearVelocity = Velocity
 			Bar.AssemblyAngularVelocity = Vector3.new(0, -Turn, 0)
 		else
@@ -269,27 +278,11 @@ function GliderController:Begin(Name: string, Start: CFrame)
 		Sendtimer += Dt
 		if Sendtimer >= SendInterval then
 			Sendtimer = 0
-			Remotemanager:FireServer("GliderService", "Move", Offset)
+			Remotemanager:FireServer("GliderService", "Move", Offset, math.sign(Side))
 		end
 
-		local Dragging = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-		if Dragging ~= Locked then
-			Locked = Dragging
-			UserInputService.MouseBehavior = if Dragging
-				then Enum.MouseBehavior.LockCurrentPosition
-				else Enum.MouseBehavior.Default
-		end
-		if Stick.Magnitude > StickDeadzone then
-			Orbit(Stick.X * StickSpeed * Dt, Stick.Y * StickSpeed * Dt)
-		end
-		Idle += Dt
-		if Idle > ReturnDelay then
-			OrbitYaw = Approach(OrbitYaw, 0, ReturnResponse, Dt)
-			OrbitPitch = Approach(OrbitPitch, 0, ReturnResponse, Dt)
-		end
-		local Rig = Heading * CFrame.Angles(0, OrbitYaw, 0) * CFrame.Angles(OrbitPitch, 0, 0)
-		local Eye = Position + Rig:VectorToWorldSpace(Vector3.new(0, CameraHeight, CameraDistance))
-		Camera.CFrame = CFrame.lookAt(Eye, Position + Rig.LookVector * CameraLookAhead)
+		local Eye = Position + Heading:VectorToWorldSpace(Vector3.new(0, CameraHeight, CameraDistance))
+		Camera.CFrame = CFrame.lookAt(Eye, Position + Heading.LookVector * CameraLookAhead)
 			* CFrame.Angles(0, 0, -Bank * CameraRoll)
 
 		if not Pilot then
@@ -317,14 +310,54 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			end
 		end
 		local Obstacles: { Instance } = {}
+		local Close = false
+		local Swept = false
 		for _, Body in ipairs(Bodies) do
 			local Box, Size = Body:GetBoundingBox()
 			for _, Part in ipairs(Workspace:GetPartBoundsInBox(Box, Size, Near)) do
-				if Part.Transparency < 1 then
+				if Part.Transparency < 1 or Part.Parent == Walls then
 					table.insert(Obstacles, Part)
 				end
 			end
+			Close = Close or #Workspace:GetPartBoundsInBox(Box, Size, Flock) > 0
+			Swept = Swept or #Workspace:GetPartBoundsInBox(Box, Size, Twister) > 0
 		end
+		local Touching = false
+		if Close then
+			for _, Part in ipairs(Shapes) do
+				if #Workspace:GetPartsInPart(Part, Flock) > 0 then
+					Touching = true
+					break
+				end
+			end
+		end
+		if Touching and not Pecked and os.clock() >= Calm then
+			Recoil = 1
+			Shove = BirdPush
+			Calm = os.clock() + KnockGrace
+			Sfx.Play(Sounds.Flight.Bird, BirdVolume)
+		end
+		Pecked = Touching
+		local Caught: BasePart? = nil
+		if Swept then
+			for _, Part in ipairs(Shapes) do
+				Caught = Workspace:GetPartsInPart(Part, Twister)[1]
+				if Caught then
+					break
+				end
+			end
+		end
+		if Caught and not Spun and os.clock() >= Tossed + TossGrace then
+			local Away = (Position - SceneryController:Eye(Caught)) * Flat
+			Recoil = 1
+			Shove = TornadoPush
+			Climb = math.max(Climb, TornadoLift)
+			Roll = math.sign(Away:Dot(Heading.RightVector))
+			Tossed = os.clock()
+			Sfx.Play(Sounds.Flight.Tornado, TornadoVolume, 1, TornadoStart)
+			self:Kick()
+		end
+		Spun = Caught ~= nil
 		if #Obstacles == 0 then
 			return
 		end
@@ -343,7 +376,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	end)
 
 	self.flight = {
-		Connections = { Loop, Look, Died },
+		Connections = { Loop, Died },
 		Wind = Wind,
 		Crash = Crash,
 		Ring = function()
@@ -366,7 +399,6 @@ function GliderController:Finish()
 	Flight.Wind:Destroy()
 	Core:GetController("SceneryController"):Aim(nil)
 	Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
-	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
 end
 
 function GliderController:Kick()
