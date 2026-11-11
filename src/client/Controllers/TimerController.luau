@@ -15,14 +15,24 @@ local TimerController = {
 	Priority = 22,
 }
 
+type Racer = {
+	Bar: BasePart,
+	Front: string,
+	Size: number,
+	Count: number,
+	Markers: { [Instance]: ImageLabel },
+	Connections: { RBXScriptConnection },
+}
+
 type Run = {
 	Began: number,
 	Frozen: number?,
-	Markers: { ImageLabel },
+	Glider: Instance,
+	Level: number,
+	Best: number,
+	Racers: { [Instance]: Racer },
 	Segments: { Frame },
-	Update: () -> (),
-	Rewind: () -> (),
-	Loop: RBXScriptConnection,
+	Connections: { RBXScriptConnection },
 }
 
 local Player = Players.LocalPlayer
@@ -38,7 +48,12 @@ local TrackTop = 46
 local TrackHeight = 12
 local SegmentGap = 8
 local MarkerSize = 34
-local MarkerSpacing = 22
+local OtherSize = 26
+local StackOffset = 10
+local SelfLayer = 5
+local PartnerLayer = 4
+local FrontLayer = 3
+local BackLayer = 2
 local FlagSize = 22
 local LeaveGap = 20
 local LeaveWidth = 160
@@ -66,19 +81,71 @@ local function Outline(Object: GuiObject, Color: Color3, Thickness: number)
 	Stroke.Parent = Object
 end
 
-function TimerController:Marker(UserId: string): ImageLabel
+function TimerController:Marker(UserId: string, Size: number, Layer: number): ImageLabel
 	local Marker = Instance.new("ImageLabel")
 	Marker.Name = UserId
 	Marker.AnchorPoint = Vector2.new(0.5, 0.5)
-	Marker.Size = UDim2.fromOffset(MarkerSize, MarkerSize)
+	Marker.Size = UDim2.fromOffset(Size, Size)
 	Marker.BackgroundColor3 = FillColor
 	Marker.BorderSizePixel = 0
 	Marker.Image = "rbxthumb://type=AvatarHeadShot&id=" .. UserId .. "&w=150&h=150"
-	Marker.ZIndex = 2
+	Marker.ZIndex = Layer
 	Round(Marker)
 	Outline(Marker, TextColor, 2)
 	Marker.Parent = self.track
 	return Marker
+end
+
+function TimerController:Join(Run: Run, Glider: Instance)
+	local Own = Glider == Run.Glider
+	local Bar = Glider:WaitForChild("Bar") :: BasePart
+	local Seats = Glider:WaitForChild("Riders")
+	if self.run ~= Run or not Glider.Parent then
+		return
+	end
+	local Racer: Racer = {
+		Bar = Bar,
+		Front = if Own then tostring(Player.UserId) else tostring(Glider:GetAttribute("Pilot")),
+		Size = if Own then MarkerSize else OtherSize,
+		Count = 0,
+		Markers = {},
+		Connections = {},
+	}
+	local function Board(Weld: Instance)
+		local Front = Weld.Name == Racer.Front
+		local Layer = if Own
+			then (if Front then SelfLayer else PartnerLayer)
+			else (if Front then FrontLayer else BackLayer)
+		Racer.Markers[Weld] = self:Marker(Weld.Name, Racer.Size, Layer)
+		Racer.Count += 1
+	end
+	for _, Weld in ipairs(Seats:GetChildren()) do
+		Board(Weld)
+	end
+	table.insert(Racer.Connections, Seats.ChildAdded:Connect(Board))
+	table.insert(
+		Racer.Connections,
+		Seats.ChildRemoved:Connect(function(Weld)
+			Racer.Markers[Weld]:Destroy()
+			Racer.Markers[Weld] = nil
+			Racer.Count -= 1
+		end)
+	)
+	Run.Racers[Glider] = Racer
+end
+
+function TimerController:Leave(Run: Run, Glider: Instance)
+	local Racer = Run.Racers[Glider]
+	if not Racer then
+		return
+	end
+	for _, Connection in ipairs(Racer.Connections) do
+		Connection:Disconnect()
+	end
+	for _, Marker in pairs(Racer.Markers) do
+		Marker:Destroy()
+	end
+	Run.Racers[Glider] = nil
 end
 
 function TimerController:Segment(Index: number, Count: number): (Frame, Frame)
@@ -104,18 +171,10 @@ function TimerController:Segment(Index: number, Count: number): (Frame, Frame)
 end
 
 function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: Vector3, Section: number } })
-	local Glider = Workspace:WaitForChild("Gliders"):WaitForChild(Name)
+	local Folder = Workspace:WaitForChild("Gliders")
+	local Glider = Folder:WaitForChild(Name)
 	local Bar = Glider:WaitForChild("Bar") :: BasePart
-	local Seats = Glider:WaitForChild("Riders")
-	Seats:WaitForChild(tostring(Player.UserId))
-	local Riders = Seats:GetChildren()
-	table.sort(Riders, function(A, B)
-		return A:GetAttribute("Offset") < B:GetAttribute("Offset")
-	end)
-	local Markers = {}
-	for _, Weld in ipairs(Riders) do
-		table.insert(Markers, self:Marker(Weld.Name))
-	end
+	Glider:WaitForChild("Riders"):WaitForChild(tostring(Player.UserId))
 
 	local Count = Route[#Route].Section
 	local First: { number } = {}
@@ -135,56 +194,80 @@ function TimerController:Begin(Name: string, Route: { { Spawn: Vector3, Finish: 
 		table.insert(Fills, Fill)
 	end
 
-	local Level = 0
-	local Best = 0
-	local Run: Run
-	local function Update()
-		Translation.Raw(self.timer, Format(os.clock() - Run.Began))
-		local Current: number = Glider:GetAttribute("Level")
-		if Current ~= Level then
-			Level = Current
-			Best = 0
-		end
+	local function Done(Level: number, Position: Vector3): number
 		local Stage = Route[Level]
-		Best = math.max(
-			Best,
-			math.clamp(
-				1 - ((Stage.Finish - Bar.Position) * Flat).Magnitude / ((Stage.Finish - Stage.Spawn) * Flat).Magnitude,
-				0,
-				1
-			)
+		return math.clamp(
+			1 - ((Stage.Finish - Position) * Flat).Magnitude / ((Stage.Finish - Stage.Spawn) * Flat).Magnitude,
+			0,
+			1
 		)
-		local Section = Stage.Section
-		local Progress = (Level - First[Section] + Best) / Size[Section]
-		for Index, Fill in ipairs(Fills) do
-			Fill.Size = UDim2.fromScale(if Index < Section then 1 elseif Index == Section then Progress else 0, 1)
-		end
-		for Index, Marker in ipairs(Markers) do
-			Marker.Position = UDim2.new(
-				(Section - 1 + Progress) / Count,
-				SegmentGap * (0.5 - Progress) + (Index - (#Markers + 1) / 2) * MarkerSpacing,
-				0.5,
-				0
-			)
-		end
 	end
-	Run = {
+	local function Locate(Level: number, Part: number): (number, number)
+		local Section = Route[Level].Section
+		return Section, (Level - First[Section] + Part) / Size[Section]
+	end
+
+	local Run: Run = {
 		Began = os.clock() - self.elapsed,
 		Frozen = nil,
-		Markers = Markers,
+		Glider = Glider,
+		Level = 0,
+		Best = 0,
+		Racers = {},
 		Segments = Segments,
-		Update = Update,
-		Rewind = function()
-			Best = 0
-		end,
-		Loop = RunService.RenderStepped:Connect(Update),
+		Connections = {},
 	}
+	local function Update()
+		if not Run.Frozen then
+			Translation.Raw(self.timer, Format(os.clock() - Run.Began))
+			local Current: number = Glider:GetAttribute("Level")
+			if Current ~= Run.Level then
+				Run.Level = Current
+				Run.Best = 0
+			end
+			Run.Best = math.max(Run.Best, Done(Run.Level, Bar.Position))
+			local Section, Progress = Locate(Run.Level, Run.Best)
+			for Index, Fill in ipairs(Fills) do
+				Fill.Size = UDim2.fromScale(if Index < Section then 1 elseif Index == Section then Progress else 0, 1)
+			end
+		end
+		for Other, Racer in pairs(Run.Racers) do
+			local Section, Progress
+			if Other == Glider then
+				Section, Progress = Locate(Run.Level, Run.Best)
+			else
+				local Level: number = Other:GetAttribute("Level")
+				Section, Progress = Locate(Level, Done(Level, Racer.Bar.Position))
+			end
+			for Weld, Marker in pairs(Racer.Markers) do
+				local Shift = if Racer.Count > 1 and Weld.Name ~= Racer.Front then StackOffset else 0
+				Marker.Position = UDim2.new((Section - 1 + Progress) / Count, SegmentGap * (0.5 - Progress) - Shift, 0.5, 0)
+			end
+		end
+	end
+
+	self.run = Run
+	for _, Other in ipairs(Folder:GetChildren()) do
+		task.spawn(self.Join, self, Run, Other)
+	end
+	table.insert(
+		Run.Connections,
+		Folder.ChildAdded:Connect(function(Other)
+			self:Join(Run, Other)
+		end)
+	)
+	table.insert(
+		Run.Connections,
+		Folder.ChildRemoved:Connect(function(Other)
+			self:Leave(Run, Other)
+		end)
+	)
+	table.insert(Run.Connections, RunService.RenderStepped:Connect(Update))
 
 	self.timer.TextColor3 = TextColor
 	Update()
 	self.gui.Enabled = true
 	self.lobby.Visible = false
-	self.run = Run
 end
 
 function TimerController:Freeze()
@@ -192,7 +275,6 @@ function TimerController:Freeze()
 	if not Run or Run.Frozen then
 		return
 	end
-	Run.Loop:Disconnect()
 	Run.Frozen = os.clock()
 	self.timer.TextColor3 = CrashColor
 end
@@ -202,13 +284,12 @@ function TimerController:Resume()
 	if not Run then
 		return
 	end
-	Run.Rewind()
+	Run.Best = 0
 	if not Run.Frozen then
 		return
 	end
 	Run.Began += os.clock() - Run.Frozen
 	Run.Frozen = nil
-	Run.Loop = RunService.RenderStepped:Connect(Run.Update)
 	self.timer.TextColor3 = TextColor
 end
 
@@ -219,7 +300,6 @@ function TimerController:Reset()
 		return
 	end
 	local Now = os.clock()
-	Run.Loop:Disconnect()
 	Run.Began = Now
 	Run.Frozen = Now
 	self.timer.TextColor3 = TextColor
@@ -242,9 +322,11 @@ function TimerController:Finish()
 	end
 	self.run = nil
 	self.elapsed = (Run.Frozen or os.clock()) - Run.Began
-	Run.Loop:Disconnect()
-	for _, Marker in ipairs(Run.Markers) do
-		Marker:Destroy()
+	for _, Connection in ipairs(Run.Connections) do
+		Connection:Disconnect()
+	end
+	for Glider in pairs(Run.Racers) do
+		self:Leave(Run, Glider)
 	end
 	for _, Segment in ipairs(Run.Segments) do
 		Segment:Destroy()

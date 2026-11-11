@@ -8,15 +8,17 @@ local Images: { [string]: { [string]: string } } = {
 		Heart = "rbxassetid://101413377181725",
 		Witch = "rbxassetid://130455359700247",
 		Pumpkin = "rbxassetid://83799659436825",
+		Sakura = "rbxassetid://135885601248526",
+		Volcano = "rbxassetid://133142695234294",
 	},
 	Particle = {
 		Pumpkin = "rbxassetid://522159546",
 		Heart = "rbxassetid://249529864",
+		Sakura = "rbxassetid://2266315754",
 	},
 	Crate = {
 		BasicTrail = "rbxassetid://87882365975816",
 		BasicGlider = "rbxassetid://87882365975816",
-		Halloween = "rbxassetid://109651299138029",
 	},
 	Counter = {
 		Revive = "rbxassetid://81684269350830",
@@ -32,6 +34,10 @@ local Images: { [string]: { [string]: string } } = {
 	},
 	Tutorial = {
 		Hand = "rbxassetid://1013090763",
+	},
+	Scenery = {
+		Smoke = "rbxasset://textures/particles/smoke_main.dds",
+		Fire = "rbxasset://textures/particles/fire_main.dds",
 	},
 }
 

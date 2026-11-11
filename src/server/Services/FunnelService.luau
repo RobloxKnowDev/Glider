@@ -12,7 +12,7 @@ local FunnelService = {
 	},
 }
 
-local Levels = 9
+local Levels = 14
 local Steps = { "Welcome", "Play", "Solo" }
 for Level = 1, Levels do
 	table.insert(Steps, "Level " .. Level .. " Passed")

@@ -30,12 +30,12 @@ return {
 	Crate = {
 		{ Name = "BasicTrail", Crate = "BasicTrail", Product = 3726799727, Price = 39 },
 		{ Name = "BasicGlider", Crate = "BasicGlider", Product = 3726799827, Price = 89 },
-		{ Name = "Halloween", Crate = "Halloween", Product = 3726799969, Price = 129 },
 	},
 	Gliders = {
 		{ Name = "67", Gamepass = 2064075650, Gift = 3727414884, Price = 199 },
 		{ Name = "Golden", Gamepass = 2064177569, Gift = 3727415000, Price = 149 },
 		{ Name = "Battle Royal", Gamepass = 2064127515, Gift = 3727415112, Price = 149 },
+		{ Name = "Plane", Gamepass = 2079734390, Gift = 3730403254, Price = 199 },
 	},
 	Trails = {
 		{ Name = "Heart", Gamepass = 2064037647, Gift = 3727415644, Price = 199 },

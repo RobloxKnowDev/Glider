@@ -1,8 +1,10 @@
 local TweenService = game:GetService("TweenService")
 
+local Propeller = require(script.Parent.Propeller)
+
 local SpinSpeed = math.rad(90)
 local SwingAngle = math.rad(70)
-local SwingSpeed = 1.5
+local SwingSpeed = 1
 local SwingHold = 0.5
 local SwingStyle = Enum.EasingStyle.Cubic
 local RiseCycle = 4
@@ -42,6 +44,29 @@ local CalmTime = 4
 local DebrisGravity = 60
 local DebrisPopTime = 0.2
 local DebrisSpin = math.rad(240)
+local SlideTime = 5
+local SlideCalm = 3
+local SlideGravity = 80
+local EruptTime = 1.5
+local EruptCalm = 8
+local EruptGravity = 100
+local HurlPopTime = 0.25
+local HurlSpin = math.rad(300)
+local Flat = Vector3.new(1, 0, 1)
+
+type Arc = {
+	Window: number,
+	Calm: number,
+	Gravity: number,
+}
+
+type Volley = {
+	Round: number,
+	Delay: number,
+	Axis: Vector3,
+	Angle: number,
+	Spin: number,
+}
 
 export type Piece = {
 	Part: BasePart,
@@ -54,6 +79,11 @@ export type Piece = {
 	Extent: Vector3?,
 	Drop: number?,
 	Length: number?,
+	Hub: CFrame?,
+	Throw: Vector3?,
+	Flight: number?,
+	Span: number?,
+	Volley: Volley?,
 	Local: CFrame,
 	Size: Vector3,
 	Scale: number,
@@ -88,9 +118,14 @@ local Scenery = {}
 local Plans: { [number]: Plan } = {}
 local Lanes: { [number]: Lane } = {}
 local Showers: { [number]: Shower } = {}
+local Arcs: { [string]: Arc } = {
+	Slide = { Window = SlideTime, Calm = SlideCalm, Gravity = SlideGravity },
+	Erupt = { Window = EruptTime, Calm = EruptCalm, Gravity = EruptGravity },
+}
 
 function Scenery.Read(Part: BasePart): Piece
 	local Hinge: CFrame = Part:GetAttribute("Hinge")
+	local Hub: CFrame? = Part:GetAttribute("Hub")
 	return {
 		Part = Part,
 		Motion = Part:GetAttribute("Motion"),
@@ -102,6 +137,10 @@ function Scenery.Read(Part: BasePart): Piece
 		Extent = Part:GetAttribute("Extent"),
 		Drop = Part:GetAttribute("Drop"),
 		Length = Part:GetAttribute("Length"),
+		Hub = if Hub then Hinge:ToObjectSpace(Hub) else nil,
+		Throw = Part:GetAttribute("Throw"),
+		Flight = Part:GetAttribute("Flight"),
+		Span = Part:GetAttribute("Span"),
 		Local =Hinge:ToObjectSpace(Part:GetAttribute("Rest")),
 		Size = Part.Size,
 		Scale = 1,
@@ -283,7 +322,50 @@ local function Downpour(Piece: Piece, Time: number): (Shower, number?)
 	return Shower, Clock - Index * Shower.Fall
 end
 
+function Scenery.Lob(Motion: string, Start: Vector3, Target: Vector3, Apex: number): (Vector3, number)
+	local Gravity = Arcs[Motion].Gravity
+	local Peak = Apex + math.max(Target.Y - Start.Y, 0)
+	local Rise = math.sqrt(2 * Gravity * Peak)
+	local Time = Rise / Gravity + math.sqrt(2 * (Peak + Start.Y - Target.Y) / Gravity)
+	return (Target - Start) * Flat / Time + Vector3.yAxis * Rise, Time
+end
+
+function Scenery.Arc(Motion: string, Start: Vector3, Throw: Vector3, Elapsed: number): Vector3
+	return Start + Throw * Elapsed - Vector3.yAxis * Arcs[Motion].Gravity * Elapsed * Elapsed / 2
+end
+
+function Scenery.Surge(Piece: Piece, Time: number): (number, number, number)
+	local Arc = Arcs[Piece.Motion]
+	local Cycle = Arc.Window + (Piece.Span :: number) + Arc.Calm
+	local Round = Time // Cycle
+	local Clock = Time - Round * Cycle
+	return Round, Clock, Cycle - Clock
+end
+
+local function Hurl(Piece: Piece, Time: number): (Volley, number?)
+	local Round, Clock = Scenery.Surge(Piece, Time)
+	local Volley = Piece.Volley
+	if not Volley or Volley.Round ~= Round then
+		local Roll = Random.new(Round * (Piece.Count :: number) + Piece.Phase)
+		Volley = {
+			Round = Round,
+			Delay = Roll:NextNumber(0, Arcs[Piece.Motion].Window),
+			Axis = Roll:NextUnitVector(),
+			Angle = Roll:NextNumber(0, 2 * math.pi),
+			Spin = Roll:NextNumber(-HurlSpin, HurlSpin),
+		}
+		Piece.Volley = Volley
+	end
+	local Elapsed = Clock - Volley.Delay
+	return Volley, if Elapsed >= 0 and Elapsed < (Piece.Flight :: number) then Elapsed else nil
+end
+
 function Scenery.Landed(Piece: Piece, Time: number): number
+	if Arcs[Piece.Motion] then
+		local Round, Clock = Scenery.Surge(Piece, Time)
+		local Volley = Hurl(Piece, Time)
+		return Round + (if Clock - Volley.Delay >= (Piece.Flight :: number) then 1 else 0)
+	end
 	local Shower = Gather(Piece)
 	local Round = Time // Shower.Cycle
 	local Clock = Time - Round * Shower.Cycle - Shower.Offset
@@ -291,6 +373,9 @@ function Scenery.Landed(Piece: Piece, Time: number): number
 end
 
 function Scenery.Impact(Piece: Piece, Drop: number): Vector3
+	if Arcs[Piece.Motion] then
+		return Scenery.Arc(Piece.Motion, Piece.Hinge.Position, Piece.Throw :: Vector3, Piece.Flight :: number)
+	end
 	local Spot = Toss(Piece, Drop)
 	return Piece.Hinge:PointToWorldSpace(Spot) - Vector3.yAxis * (Piece.Drop :: number)
 end
@@ -305,6 +390,12 @@ function Scenery.Scale(Piece: Piece, Time: number): number
 			return 0
 		end
 		return TweenService:GetValue(math.min(Elapsed / DebrisPopTime, 1), PopStyle, Enum.EasingDirection.Out)
+	elseif Arcs[Piece.Motion] then
+		local _, Elapsed = Hurl(Piece, Time)
+		if not Elapsed then
+			return 0
+		end
+		return TweenService:GetValue(math.min(Elapsed / HurlPopTime, 1), PopStyle, Enum.EasingDirection.Out)
 	elseif Piece.Motion ~= "Fly" and Piece.Motion ~= "Flap" then
 		return 1
 	end
@@ -345,10 +436,22 @@ function Scenery.Pose(Piece: Piece, Time: number, Altitude: number?): CFrame
 		local Fallen = DebrisGravity * Elapsed * Elapsed / 2
 		return CFrame.new(Piece.Hinge:PointToWorldSpace(Shower.Spot) - Vector3.yAxis * Fallen)
 			* CFrame.fromAxisAngle(Shower.Axis, Shower.Angle + Shower.Spin * Elapsed)
-	elseif Piece.Motion == "Turn" then
+	elseif Arcs[Piece.Motion] then
+		local Volley, Elapsed = Hurl(Piece, Time)
+		if not Elapsed then
+			return Piece.Hinge
+		end
+		return CFrame.new(Scenery.Arc(Piece.Motion, Piece.Hinge.Position, Piece.Throw :: Vector3, Elapsed))
+			* CFrame.fromAxisAngle(Volley.Axis, Volley.Angle + Volley.Spin * Elapsed)
+	elseif Piece.Motion == "Turn" or Piece.Motion == "Propel" then
 		local Angle = (Time * TurnSpeed) % (2 * math.pi)
 		local Height = BobHeight * math.sin(Time * BobSpeed + 2 * math.pi * (Piece.Phase - 1) / (Piece.Count :: number))
-		return Piece.Hinge * CFrame.new(0, Height, 0) * CFrame.fromAxisAngle(Piece.Axis, Angle) * Piece.Local
+		local Frame = Piece.Hinge * CFrame.new(0, Height, 0) * CFrame.fromAxisAngle(Piece.Axis, Angle)
+		if Piece.Motion == "Propel" then
+			local Hub = Piece.Hub :: CFrame
+			return Frame * Hub * Propeller.Spin(Time) * Hub:Inverse() * Piece.Local
+		end
+		return Frame * Piece.Local
 	end
 	local Angle = if Piece.Motion == "Swing"
 		then Swing(Time, Piece.Phase)

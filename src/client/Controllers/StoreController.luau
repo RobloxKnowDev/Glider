@@ -12,6 +12,7 @@ local Rarities = require(ReplicatedStorage.Shared.Config.Rarities)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
+local NewBadge = require(ReplicatedStorage.Shared.Utils.NewBadge)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
 local UiFade = require(ReplicatedStorage.Shared.Utils.UiFade)
@@ -33,6 +34,7 @@ type Entry = {
 	Name: string,
 	Rarity: string,
 	Multiplier: number?,
+	New: boolean?,
 }
 
 type Style = {
@@ -74,6 +76,7 @@ local BuyStyle: Style = {
 	TextStroke = Color3.fromRGB(125, 90, 0),
 }
 local Items = { "Gliders", "Trails" }
+local NewZIndex = 12
 local SpinSpeed = math.rad(90)
 local SpinReturnResponse = 8
 local SpinInfo = TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1)
@@ -157,6 +160,9 @@ function StoreController:Card(Section: string, Pack: Pack, Entry: Entry)
 	Rarity.TextColor3 = White
 	UiGradient.Ensure(Rarity).Color = Tier.Gradient
 	RarityStroke.Color = Tier.Stroke
+	if Entry.New then
+		NewBadge.Right(Holder, Rarity.FontFace, NewZIndex)
+	end
 
 	if Section == "Gliders" then
 		local Model, Base = GliderShowcase(Holder:WaitForChild("ViewportFrame") :: ViewportFrame, self.models:WaitForChild(Pack.Name) :: Model)

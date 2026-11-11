@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
+local Propeller = require(ReplicatedStorage.Shared.Utils.Propeller)
 local Scenery = require(ReplicatedStorage.Shared.Utils.Scenery)
 
 local SceneryService = {
@@ -19,6 +20,43 @@ local DebrisMax = 10
 local DebrisRatio = 0.3
 local DebrisColor = Color3.fromRGB(81, 83, 91)
 local DebrisMaterial = Enum.Material.Slate
+local HurlRatio = 0.25
+local HurlHop = 15
+local HurlTries = 6
+local HurlShare = 0.8
+local MarkLift = 200
+local SinkDepth = 200
+local TraceStep = 0.05
+local Faces = { "TopSurface", "BottomSurface", "LeftSurface", "RightSurface", "FrontSurface", "BackSurface" }
+
+type Barrage = {
+	Motion: string,
+	Amount: number,
+	Bulk: NumberRange,
+	Color: Color3,
+	Fan: number,
+	Reach: NumberRange,
+	Loft: NumberRange,
+}
+
+local Rockfall: Barrage = {
+	Motion = "Slide",
+	Amount = 40,
+	Bulk = NumberRange.new(7, 13),
+	Color = Color3.fromRGB(58, 59, 64),
+	Fan = math.rad(70),
+	Reach = NumberRange.new(150, 150),
+	Loft = NumberRange.new(0.08, 0.2),
+}
+local Eruption: Barrage = {
+	Motion = "Erupt",
+	Amount = 45,
+	Bulk = NumberRange.new(12, 22),
+	Color = Color3.fromRGB(255, 94, 0),
+	Fan = math.pi,
+	Reach = NumberRange.new(0, 100),
+	Loft = NumberRange.new(0.35, 0.6),
+}
 
 local function Ground(Folder: Instance): RaycastParams
 	local Params = RaycastParams.new()
@@ -29,9 +67,49 @@ local function Ground(Folder: Instance): RaycastParams
 		Workspace:WaitForChild("Windzones"),
 		Workspace:WaitForChild("WindTurbineZones"),
 		Workspace:WaitForChild("InvisibleWalls"),
+		Workspace:WaitForChild("SpawnDebriesZone"),
+		Workspace:WaitForChild("RocksFallingZones"),
 	}
 	Params.RespectCanCollide = true
 	return Params
+end
+
+local function Within(Zone: BasePart, Point: Vector3): boolean
+	local Local = Zone.CFrame:PointToObjectSpace(Point)
+	return math.abs(Local.X) <= Zone.Size.X / 2
+		and math.abs(Local.Y) <= Zone.Size.Y / 2
+		and math.abs(Local.Z) <= Zone.Size.Z / 2
+end
+
+local function Scatter(Roll: Random, Reach: Vector3): Vector3
+	return Vector3.new(
+		Roll:NextNumber(-Reach.X, Reach.X),
+		Roll:NextNumber(-Reach.Y, Reach.Y),
+		Roll:NextNumber(-Reach.Z, Reach.Z)
+	)
+end
+
+local function Course(Point: Vector3): (Vector3, number)
+	local Closest, Low, Nearest = Vector3.zero, 0, math.huge
+	for _, Stage in ipairs(Workspace:WaitForChild("Level"):GetChildren()) do
+		local Spawn = (Stage:WaitForChild("SpawnPart") :: BasePart).Position
+		local Finish = (Stage:WaitForChild("Finish") :: BasePart).Position
+		local Path = (Finish - Spawn) * Flat
+		local Along = math.clamp(((Point - Spawn) * Flat):Dot(Path) / Path:Dot(Path), 0, 1)
+		local Spot = Spawn:Lerp(Finish, Along)
+		local Gap = ((Spot - Point) * Flat).Magnitude
+		if Gap < Nearest then
+			Closest, Low, Nearest = Spot, math.min(Spawn.Y, Finish.Y), Gap
+		end
+	end
+	return Closest, Low
+end
+
+local function Hide(Zone: BasePart)
+	Zone.Transparency = 1
+	Zone.CanCollide = false
+	Zone.CanQuery = false
+	Zone.CanTouch = false
 end
 
 local function Span(Box: CFrame, Size: Vector3, Direction: Vector3): number
@@ -93,10 +171,7 @@ function SceneryService:Flock(Folder: Instance)
 	local Index = 0
 	for _, Child in ipairs(Zones) do
 		local Zone = Child :: BasePart
-		Zone.Transparency = 1
-		Zone.CanCollide = false
-		Zone.CanQuery = false
-		Zone.CanTouch = false
+		Hide(Zone)
 		for _ = 1, BirdsPerZone do
 			Index += 1
 			self:Hatch(Model, Zone, Index, #Zones * BirdsPerZone, Folder)
@@ -108,10 +183,7 @@ function SceneryService:Whirl(Folder: Instance)
 	local Model = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Level"):WaitForChild("Tornado") :: Model
 	for Index, Child in ipairs(Folder:GetChildren()) do
 		local Zone = Child :: BasePart
-		Zone.Transparency = 1
-		Zone.CanCollide = false
-		Zone.CanQuery = false
-		Zone.CanTouch = false
+		Hide(Zone)
 
 		local Tornado = Model:Clone()
 		Tornado:PivotTo(CFrame.identity)
@@ -201,10 +273,7 @@ function SceneryService:Rain(Folder: Instance)
 	local Index = 0
 	for _, Child in ipairs(Zones) do
 		local Zone = Child :: BasePart
-		Zone.Transparency = 1
-		Zone.CanCollide = false
-		Zone.CanQuery = false
-		Zone.CanTouch = false
+		Hide(Zone)
 		local Top = Zone.Position.Y + Zone.Size.Y / 2
 		local Bottom = Zone.Position - Vector3.yAxis * Zone.Size.Y / 2
 		local Hit = Workspace:Raycast(Bottom, -Vector3.yAxis * FallReach, Floor) :: RaycastResult
@@ -236,16 +305,157 @@ function SceneryService:Rain(Folder: Instance)
 	end
 end
 
+function SceneryService:Trace(
+	Zone: BasePart,
+	Motion: string,
+	Start: Vector3,
+	Throw: Vector3,
+	Time: number,
+	Floor: RaycastParams
+): number
+	local Before = Start
+	for Step = 1, math.ceil(Time / TraceStep) do
+		local After = Scenery.Arc(Motion, Start, Throw, Step * TraceStep)
+		if After.Y < Before.Y and not Within(Zone, Before) then
+			local Hit = Workspace:Raycast(Before, After - Before, Floor)
+			if Hit then
+				return (Step - 1 + (Hit.Position - Before).Magnitude / (After - Before).Magnitude) * TraceStep
+			end
+		end
+		Before = After
+	end
+	return Time
+end
+
+function SceneryService:Hurl(
+	Zone: BasePart,
+	Style: Barrage,
+	Toward: Vector3,
+	Near: number,
+	Sink: number,
+	First: number,
+	Count: number,
+	Floor: RaycastParams
+): Model
+	Hide(Zone)
+	local Roll = Random.new()
+	local Ceiling = Zone.Position.Y + Zone.Size.Y / 2 + MarkLift
+	local Rocks: { BasePart } = {}
+	local Span = 0
+	for _ = 1, Style.Amount do
+		local Rock = Instance.new("Part")
+		Rock.Name = "Rock"
+		Rock.Size = Roll:NextNumber(Style.Bulk.Min, Style.Bulk.Max)
+			* (Vector3.one + Scatter(Roll, Vector3.one * HurlRatio))
+		Rock.Color = Style.Color
+		Rock.Material = Enum.Material.Plastic
+		for _, Face in ipairs(Faces) do
+			(Rock :: any)[Face] = Enum.SurfaceType.Studs
+		end
+		Rock.Anchored = true
+		Rock.CanTouch = false
+
+		local Room = (Zone.Size / 2 - Vector3.one * Rock.Size.Magnitude / 2):Max(Vector3.zero)
+		local Start, Throw, Flight, Gone = Zone.Position, Vector3.zero, 0, -1
+		for _ = 1, HurlTries do
+			local Origin = Zone.CFrame:PointToWorldSpace(Scatter(Roll, Room))
+			local Way = CFrame.fromAxisAngle(Vector3.yAxis, Roll:NextNumber(-Style.Fan, Style.Fan)) * Toward
+			local Distance = Near + Roll:NextNumber(Style.Reach.Min, Style.Reach.Max)
+			local Mark = Origin + Way * Distance
+			local Hit = Workspace:Raycast(Vector3.new(Mark.X, Ceiling, Mark.Z), -Vector3.yAxis * FallReach, Floor)
+			local Target = if Hit then Hit.Position else Vector3.new(Mark.X, Sink, Mark.Z)
+			local Apex = math.max(Distance * Roll:NextNumber(Style.Loft.Min, Style.Loft.Max), HurlHop)
+			local Launch, Time = Scenery.Lob(Style.Motion, Origin, Target, Apex)
+			local Flown = self:Trace(Zone, Style.Motion, Origin, Launch, Time, Floor)
+			local Landing = Scenery.Arc(Style.Motion, Origin, Launch, Flown)
+			local Travel = ((Landing - Origin) * Flat).Magnitude
+			if Travel > Gone then
+				Start, Throw, Flight, Gone = Origin, Launch, Flown, Travel
+			end
+			if Flown >= Time * HurlShare then
+				Start, Throw, Flight = Origin, Launch, Flown
+				break
+			end
+		end
+		Span = math.max(Span, Flight)
+		Rock.CFrame = CFrame.new(Start)
+		Rock:SetAttribute("Zone", Zone.CFrame)
+		Rock:SetAttribute("Extent", Zone.Size)
+		Rock:SetAttribute("Throw", Throw)
+		Rock:SetAttribute("Flight", Flight)
+		table.insert(Rocks, Rock)
+	end
+
+	local Model = Instance.new("Model")
+	Model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
+	for Index, Rock in ipairs(Rocks) do
+		Rock:SetAttribute("Span", Span)
+		Scenery.Mark(Rock, Style.Motion, Rock.CFrame, Vector3.zero, First + Index, Count)
+		Rock.Parent = Model
+	end
+	return Model
+end
+
+function SceneryService:Slide(Folder: Instance)
+	local Floor = Ground(Folder)
+	local Zones = Folder:GetChildren()
+	for Index, Child in ipairs(Zones) do
+		local Zone = Child :: BasePart
+		local Closest, Low = Course(Zone.Position)
+		local Toward = ((Closest - Zone.Position) * Flat).Unit
+		local Rocks = self:Hurl(
+			Zone,
+			Rockfall,
+			Toward,
+			0,
+			Low - SinkDepth,
+			(Index - 1) * Rockfall.Amount,
+			#Zones * Rockfall.Amount,
+			Floor
+		)
+		Rocks.Name = "Rocks"
+		Rocks.Parent = Folder
+	end
+end
+
+function SceneryService:Erupt(Volcano: Model)
+	local Zone = Volcano:WaitForChild("VolcanoZone") :: BasePart
+	local Box, Size = Volcano:GetBoundingBox()
+	local Foot = math.max(Size.X, Size.Z) / 2 + ((Box.Position - Zone.Position) * Flat).Magnitude
+	local _, Low = Course(Zone.Position)
+	local Lava = self:Hurl(Zone, Eruption, Vector3.xAxis, Foot, Low - SinkDepth, 0, Eruption.Amount, Ground(Zone))
+	Lava.Name = "Lava"
+	Lava.Parent = Volcano
+end
+
+function SceneryService:Storm(Folder: Instance)
+	local Zones = Folder:GetChildren()
+	for Index, Child in ipairs(Zones) do
+		local Zone = Child :: BasePart
+		Hide(Zone)
+		Zone:SetAttribute("Phase", Index)
+		Zone:SetAttribute("Count", #Zones)
+	end
+end
+
 function SceneryService:Turn(Folder: Instance)
 	local Gliders = Folder:GetChildren()
 	for Index, Child in ipairs(Gliders) do
-		local Box = (Child :: Model):GetBoundingBox()
-		for _, Part in ipairs(Child:GetDescendants()) do
+		local Glider = Child :: Model
+		local Hinge = CFrame.new(Glider:GetBoundingBox().Position)
+		local Helice = Glider:FindFirstChild("Helice")
+		local Hub = if Helice then Propeller.Hub(Glider) else nil
+		for _, Part in ipairs(Glider:GetDescendants()) do
 			if Part:IsA("JointInstance") or Part:IsA("WeldConstraint") then
 				Part:Destroy()
 			elseif Part:IsA("BasePart") then
 				Part.Anchored = true
-				Scenery.Mark(Part, "Turn", CFrame.new(Box.Position), Vector3.yAxis, Index, #Gliders)
+				if Hub and Part:IsDescendantOf(Helice :: Instance) then
+					Part:SetAttribute("Hub", Hub)
+					Scenery.Mark(Part, "Propel", Hinge, Vector3.yAxis, Index, #Gliders)
+				else
+					Scenery.Mark(Part, "Turn", Hinge, Vector3.yAxis, Index, #Gliders)
+				end
 			end
 		end
 	end
@@ -262,6 +472,9 @@ function SceneryService:Start()
 	self:Rain(Workspace:WaitForChild("SpawnDebriesZone"))
 	self:Flock(Workspace:WaitForChild("BirdsZones"))
 	self:Whirl(Workspace:WaitForChild("TornadoZone"))
+	self:Storm(Workspace:WaitForChild("SnowWindZones"))
+	self:Erupt(Workspace:WaitForChild("Volcano") :: Model)
+	self:Slide(Workspace:WaitForChild("RocksFallingZones"))
 	self:Turn(Workspace:WaitForChild("RotatingGliders"))
 
 	RunService.Heartbeat:Connect(function()

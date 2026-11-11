@@ -14,6 +14,7 @@ local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
+local NewBadge = require(ReplicatedStorage.Shared.Utils.NewBadge)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
 local Translation = require(ReplicatedStorage.Shared.Utils.Translation)
@@ -35,6 +36,8 @@ type Entry = {
 	Name: string,
 	Rarity: string,
 	Multiplier: number?,
+	Retired: boolean?,
+	New: boolean?,
 }
 
 type Pack = {
@@ -53,6 +56,7 @@ type Card = {
 	Name: string,
 	Pack: Pack?,
 	Price: number?,
+	Retired: boolean,
 	Clone: GuiObject,
 	Button: GuiButton,
 	Stroke: UIStroke,
@@ -169,6 +173,9 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 	local Corner = Holder:WaitForChild("UICorner"):Clone()
 	Corner.Parent = Lock
 	Lock.Parent = Holder
+	if Entry.New then
+		NewBadge.Right(Holder, Rarity.FontFace, LockZIndex + 2)
+	end
 
 	local Pack = self.offers[Category][Entry.Name]
 	local Card: Card = {
@@ -176,6 +183,7 @@ function InventoryController:Build(Category: string, Scrolling: ScrollingFrame, 
 		Name = Entry.Name,
 		Pack = Pack,
 		Price = Pack and Pack.Price,
+		Retired = Entry.Retired == true,
 		Clone = Clone,
 		Button = Button,
 		Stroke = Button:WaitForChild("UIStroke") :: UIStroke,
@@ -228,6 +236,7 @@ function InventoryController:Apply(State)
 	for _, Card in ipairs(self.cards) do
 		local Inventory = State[Card.Category]
 		local Owned = Inventory.Owned[Card.Name] == true
+		Card.Clone.Visible = Owned or not Card.Retired
 		Card.Lock.Visible = not Owned and not Card.Pack
 		if not Owned and Card.Pack then
 			Paint(Card, BuyStyle, Card.Price .. Robux)

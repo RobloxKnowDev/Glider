@@ -35,6 +35,14 @@ local TornadoPush = 120
 local TossGrace = 1.5
 local RollTime = 1.2
 local RollStyle = Enum.EasingStyle.Quad
+local BlizzardPush = 110
+local GaleResponse = 6
+local BlizzardSway = math.rad(24)
+local BlizzardNod = math.rad(9)
+local BlizzardFlutter = 13
+local FlutterRatio = 0.57
+local SwayResponse = 6
+local CameraShake = math.rad(2.5)
 local MaxBank = math.rad(30)
 local TurnSpeed = math.rad(45)
 local BankResponse = 3
@@ -101,6 +109,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Pilot = Glider:GetAttribute("Pilot") == Player.UserId
 
 	local SceneryController = Core:GetController("SceneryController")
+	local BlizzardController = Core:GetController("BlizzardController")
 	local RiderController = Core:GetController("RiderController")
 	local ArrowController = Core:GetController("ArrowController")
 	local Seats = Glider:WaitForChild("Riders")
@@ -155,6 +164,8 @@ function GliderController:Begin(Name: string, Start: CFrame)
 	local Roll = 0
 	local Tossed = -math.huge
 	local Spun = false
+	local Flutter = 0
+	local Stormed = false
 	local Sendtimer = 0
 	local Follow: Vector3? = nil
 	local Watch = Vector3.zero
@@ -231,6 +242,18 @@ function GliderController:Begin(Name: string, Start: CFrame)
 				break
 			end
 		end
+		local Gale: Vector3? = BlizzardController:Gust(Position)
+		if Gale then
+			Push = (Push or Vector3.zero) + Gale * BlizzardPush
+		end
+		if Gale and not Stormed then
+			self:Kick()
+		end
+		Stormed = Gale ~= nil
+		Flutter = Approach(Flutter, if Gale then Gale.Magnitude else 0, SwayResponse, Dt)
+		local Beat = os.clock() * BlizzardFlutter
+		local Sway = Flutter * (math.sin(Beat) + math.sin(Beat * FlutterRatio)) / 2
+		local Jolt = Flutter * CameraShake
 		local Blowing = Inside or Push ~= nil
 		if Blowing and not Gusting then
 			Sfx.Play(Sounds.Flight.Gust, GustVolume)
@@ -249,7 +272,7 @@ function GliderController:Begin(Name: string, Start: CFrame)
 				then Approach(Climb, WindLiftSpeed, LiftResponse, Dt)
 				else Approach(Climb, -SinkSpeed, SinkResponse, Dt)
 			Drift = if Push
-				then Drift:Lerp(Push, 1 - math.exp(-PushResponse * Dt))
+				then Drift:Lerp(Push, 1 - math.exp(-(if Gale then GaleResponse else PushResponse) * Dt))
 				else Drift:Lerp(Vector3.zero, 1 - math.exp(-DriftResponse * Dt))
 			Boost = Approach(Boost, 0, BoostResponse, Dt)
 			Recoil = Approach(Recoil, 0, KnockResponse, Dt)
@@ -259,7 +282,11 @@ function GliderController:Begin(Name: string, Start: CFrame)
 			Position += Velocity * Dt
 			local Spin = math.min((os.clock() - Tossed) / RollTime, 1)
 			local Flip = Roll * 2 * math.pi * TweenService:GetValue(Spin, RollStyle, Enum.EasingDirection.Out)
-			Bar.CFrame = CFrame.new(Position) * Heading * CFrame.Angles(0, 0, -Bank - Flip) * Unframe
+			local Nod = Flutter * BlizzardNod * math.cos(Beat * FlutterRatio)
+			Bar.CFrame = CFrame.new(Position)
+				* Heading
+				* CFrame.Angles(Nod, 0, -Bank - Flip - Sway * BlizzardSway)
+				* Unframe
 			Bar.AssemblyLinearVelocity = Velocity
 			Bar.AssemblyAngularVelocity = Vector3.new(0, -Turn, 0)
 		else
@@ -283,7 +310,11 @@ function GliderController:Begin(Name: string, Start: CFrame)
 
 		local Eye = Position + Heading:VectorToWorldSpace(Vector3.new(0, CameraHeight, CameraDistance))
 		Camera.CFrame = CFrame.lookAt(Eye, Position + Heading.LookVector * CameraLookAhead)
-			* CFrame.Angles(0, 0, -Bank * CameraRoll)
+			* CFrame.Angles(
+				Jolt * math.sin(Beat * FlutterRatio),
+				Jolt * math.cos(Beat),
+				-Bank * CameraRoll + Jolt * math.sin(Beat)
+			)
 
 		if not Pilot then
 			return

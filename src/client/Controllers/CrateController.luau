@@ -16,6 +16,7 @@ local Sounds = require(ReplicatedStorage.Shared.Config.Sounds)
 local CrateRoll = require(ReplicatedStorage.Shared.Utils.CrateRoll)
 local GainBurst = require(ReplicatedStorage.Shared.Utils.GainBurst)
 local GliderShowcase = require(ReplicatedStorage.Shared.Utils.GliderShowcase)
+local NewBadge = require(ReplicatedStorage.Shared.Utils.NewBadge)
 local NumberAbbreviator = require(ReplicatedStorage.Shared.Utils.NumberAbbreviator)
 local RobuxPrice = require(ReplicatedStorage.Shared.Utils.RobuxPrice)
 local Sfx = require(ReplicatedStorage.Shared.Utils.Sfx)
@@ -32,6 +33,7 @@ type Entry = {
 	Name: string,
 	Rarity: string,
 	Multiplier: number?,
+	New: boolean?,
 }
 
 type Card = {
@@ -126,7 +128,8 @@ function CrateController:Card(Index: number): Card
 	Rarity.TextColor3 = White
 	UiGradient.Ensure(Rarity).Color = Tier.Gradient
 	RarityStroke.Color = Tier.Stroke
-	Translation.Raw(Clone:WaitForChild("Percent") :: TextLabel, NumberAbbreviator(Reward.Chance / self.total * 100) .. "%")
+	local Percent = Clone:WaitForChild("Percent") :: TextLabel
+	Translation.Raw(Percent, NumberAbbreviator(Reward.Chance / self.total * 100) .. "%")
 
 	local Viewport = Clone:WaitForChild("ViewportFrame") :: ViewportFrame
 	local Icon = Clone:WaitForChild("IconTrail") :: ImageLabel
@@ -152,6 +155,11 @@ function CrateController:Card(Index: number): Card
 	Dim.ZIndex = DimZIndex
 	Clone:WaitForChild("UICorner"):Clone().Parent = Dim
 	Dim.Parent = Clone
+	if Entry.New and Reward.Category == "Trails" then
+		NewBadge.Below(Clone, Percent, Rarity.FontFace, DimZIndex - 1)
+	elseif Entry.New then
+		NewBadge.Left(Clone, Rarity.FontFace, DimZIndex - 1)
+	end
 
 	Clone.Parent = self.frame
 	local Card: Card = { Clone = Clone, Scale = Scale, Dim = Dim }

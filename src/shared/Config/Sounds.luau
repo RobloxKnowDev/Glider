@@ -50,6 +50,16 @@ local Sounds: { [string]: { [string]: string } } = {
 	Debris = {
 		Rain = "rbxassetid://9113218410",
 	},
+	Rockfall = {
+		Slide = "rbxassetid://9113218410",
+	},
+	Volcano = {
+		Erupt = "rbxassetid://9114224431",
+		Impact = "rbxassetid://9118609567",
+	},
+	Blizzard = {
+		Wind = "rbxassetid://9125438322",
+	},
 	Inventory = {
 		Obtained = "rbxassetid://17208380755",
 	},

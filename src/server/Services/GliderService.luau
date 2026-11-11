@@ -9,6 +9,7 @@ local Remotemanager = require(ReplicatedStorage.Shared.Packages.RemoteManager)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local GliderFrame = require(ReplicatedStorage.Shared.Utils.GliderFrame)
 local GliderSeat = require(ReplicatedStorage.Shared.Utils.GliderSeat)
+local Propeller = require(ReplicatedStorage.Shared.Utils.Propeller)
 local Ragdoll = require(script.Parent.Parent.Utils.Ragdoll)
 
 local GliderService = {
@@ -190,8 +191,21 @@ function GliderService:Launch(Team: { Player })
 	Core:GetService("TrailService"):Attach(Bar, Frame, Inventory:GetEquipped(Host, "Trails"))
 	Glider:PivotTo(Start * Frame:Inverse() * Bar.CFrame:ToObjectSpace(Glider:GetPivot()))
 	Core:GetService("CollisionService"):Glider(Glider)
+	local Helice = Glider:FindFirstChild("Helice")
+	local Hub = if Helice then Propeller.Hub(Glider) else nil
 	for _, Part in ipairs(Glider:GetDescendants()) do
-		if Part:IsA("BasePart") and Part ~= Bar then
+		if not Part:IsA("BasePart") or Part == Bar then
+			continue
+		end
+		if Hub and Part:IsDescendantOf(Helice :: Instance) then
+			local Motor = Instance.new("Motor6D")
+			Motor.Name = "Helice"
+			Motor.Part0 = Bar
+			Motor.Part1 = Part
+			Motor.C0 = Bar.CFrame:ToObjectSpace(Hub)
+			Motor.C1 = Part.CFrame:ToObjectSpace(Hub)
+			Motor.Parent = Part
+		else
 			local Joint = Instance.new("WeldConstraint")
 			Joint.Part0 = Bar
 			Joint.Part1 = Part

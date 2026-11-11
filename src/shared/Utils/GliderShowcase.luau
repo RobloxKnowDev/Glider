@@ -1,4 +1,5 @@
 local GliderFrame = require(script.Parent.GliderFrame)
+local Propeller = require(script.Parent.Propeller)
 
 local FieldOfView = 40
 local Zoom = 1.35
@@ -23,6 +24,7 @@ local function GliderShowcase(Viewport: ViewportFrame, Template: Model): (Model,
 	Viewport.LightColor = LightColor
 	Viewport.Ambient = Ambient
 	Model.Parent = Viewport
+	Propeller.Showcase(Model)
 	return Model, Model:GetPivot()
 end
 
